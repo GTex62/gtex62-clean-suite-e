@@ -1,0 +1,69 @@
+suite_id = "clean-e"
+name = "gtex62-clean-suite-e"
+version = "0.1.0"
+core_requirement = ">=1.0,<2.0"
+
+[repo]
+layout = "core-native"
+
+[entrypoints]
+theme_dir   = "theme"
+lua_dir     = "lua"
+widgets_dir = "widgets"
+scripts_dir = "scripts"
+
+[assets]
+design_dir        = "design"
+docs_dir          = "docs"
+shared_assets_dir = "../gtex62-shared-assets"
+fonts_dir         = "../gtex62-shared-assets/fonts"
+icons_dir         = "../gtex62-shared-assets/icons"
+wallpapers_dir    = "../gtex62-shared-assets/wallpapers"
+
+[theme]
+default_palette = "default"
+palette_catalog = "theme/clean-palettes.lua"
+palette_format  = "role3"
+
+[instances]
+# chassis  = grouped transparent window (multiple panels drawn by one Conky process)
+# standalone = single-purpose transparent window (one panel, one Conky process)
+
+[[instances.chassis]]
+id          = "monitor"
+conf        = "widgets/clean-monitor.conky.conf"
+description = "System and network panels (SYS + NET)"
+
+[[instances.chassis]]
+id          = "ambient"
+conf        = "widgets/clean-ambient.conky.conf"
+description = "Weather, astronomy, and time panels (WXR + ORB + TME)"
+
+[[instances.chassis]]
+id          = "media"
+conf        = "widgets/clean-media.conky.conf"
+description = "Music, notes, and lyrics panels (MSC + NOTES + LYRICS)"
+
+[[instances.standalone]]
+id          = "pfsense"
+conf        = "widgets/clean-pfsense.conky.conf"
+description = "VLAN traffic flow visualization (arcs). Infrastructure status is handled by the core sitrep utility."
+optional    = true
+
+[data]
+# Core domains this suite consumes.
+# The core launcher uses this list to schedule provider refresh at startup.
+# pfsense feeds the VLAN flow standalone panel.
+# network and connectivity feed the NET chassis panel.
+# astro and aviation feed the ambient chassis ORB and WXR panels.
+# air is new to this suite (not present in the legacy clean-suite).
+domains = [
+  "system",
+  "weather",
+  "astro",
+  "aviation",
+  "air",
+  "network",
+  "connectivity",
+  "pfsense",
+]
