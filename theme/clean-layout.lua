@@ -76,21 +76,34 @@ layout.calendar = {
 
 ----------------------------------------------------------------
 -- Media chassis  (MSC + LYRICS)
--- Tall panel on the secondary monitor (or right edge of primary).
--- Legacy footprint: music 640×270 + lyrics 560×940.
+-- One top_middle window on head 1 covering both legacy windows'
+-- MEASURED rendered footprints (2026-08-28, running legacy widgets):
+--   music.conky.conf        rendered at physical (5307,734) 906×389,
+--                           arc center at (5760,938)
+--   music-lyrics.conky.conf rendered at physical (6201,413) 795×1324
+-- The legacy confs' raw values (640×270 gap 0,530 / 560×940 gap
+-- −600,300) are NOT the rendered truth — same pitfall as calendar/
+-- notes/monitor; both windows autosized and repositioned.
+-- gap_x 0 keeps the window centered, so panels.msc's width/2 arc axis
+-- renders at the same x as the ambient arc axis (5755 physical, the
+-- shared panel-width/2 convention). gap_y 413 puts the window top at
+-- 408 (top_middle window_top = gap_y − 5), which gives lyrics its
+-- measured y and puts the msc arc center at abs y 938 via
+-- panels.msc.y + arc.dy.
+-- The window rectangle overlaps the ambient and pfSense windows, but
+-- the drawn content boxes are disjoint (msc content starts below the
+-- ambient chassis bottom; lyrics sits right of the pfSense dome) —
+-- transparent window overlap is fine, content overlap is not.
 -- NOTES is a standalone top_right window (layout.notes), matching
 -- the legacy suite — it does not live in this chassis.
--- UNCONVERTED: geometry below is still the OSA leftover; audit
--- against legacy music/lyrics confs (top_middle gap 0,530 / -600,300)
--- during the msc/lyrics conversions.
 ----------------------------------------------------------------
 layout.media = {
-  frame         = { x = 0, y = 0, width = 580, height = 1300 },
-  margin        = { top = 24, left = 18, right = 18, gap = 18 },
-  xinerama_head = 1, -- secondary monitor
+  frame         = { x = 0, y = 0, width = 1700, height = 1340 },
+  margin        = { top = 0, left = 0, right = 0, gap = 0 },
+  xinerama_head = 1, -- secondary monitor (legacy monitor_head = 1)
   alignment     = "top_middle",
   gap_x         = 0,
-  gap_y         = 1000,
+  gap_y         = 413,
 }
 
 ----------------------------------------------------------------

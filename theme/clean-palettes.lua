@@ -25,6 +25,9 @@ palettes["default"] = {
   net_up   = { 1.00, 0.69, 0.00, 1.00 }, -- #FFB000 upload
   net_down = { 0.00, 0.84, 1.00, 1.00 }, -- #00D7FF download
 
+  -- Slash-bar unfilled segments (SYS panel CPU/RAM/GPU meters)
+  slash_empty = { 0.35, 0.35, 0.35, 1.00 }, -- #5A5A5A (legacy bar_empty_color)
+
   -- pfSense VLAN flow arcs. Direction is encoded by marker shape
   -- (filled IN / hollow OUT), per-VLAN marker colors are fixed
   -- conventions in clean-theme.lua (theme.pf_markers) — so the only
@@ -48,6 +51,8 @@ palettes["dark"] = {
 
   net_up   = { 1.00, 0.69, 0.00, 1.00 },
   net_down = { 0.20, 0.90, 0.80, 1.00 },
+
+  slash_empty = { 0.30, 0.32, 0.38, 1.00 }, -- blue-shifted gray, matches dim ramp
 
   pf_arc_base = { 0.55, 0.55, 0.60, 1.00 },
 }

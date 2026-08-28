@@ -1,18 +1,42 @@
+---@diagnostic disable: need-check-nil, param-type-mismatch
 -- lua/suite/msc.lua
--- MSC domain view model for gtex62-clean-suite-e.
--- Suite-local only: no core provider. Reads playerctl directly at draw time
--- for live music state; lyrics from suite cache. (Notes moved to its own
--- standalone view model, lua/suite/notes.lua.)
+-- MSC + LYRICS view model for gtex62-clean-suite-e.
+-- Split domain (audited 2026-08-28, see the recovery runbook):
+--   • Playback state, volume/mute, cover art — suite-local: read from
+--     playerctl/pactl at draw time (no core provider; conversion guide
+--     §1.2 keeps media-player state suite-local).
+--   • Lyrics — CORE media domain: providers/media/fetch_lyrics.py
+--     writes shared/media/[profile]/lyrics.json with display-ready
+--     lines (LRC timestamps already stripped provider-side). This
+--     module only READS that file — no fetching, no library access;
+--     gtex62-core/docs/lyrics-library-design.md owns all of that.
+--
+-- Album Art Image Reload pitfall (conversion guide) — resolved
+-- differently here: the legacy mtime-named-copy workaround existed
+-- only to defeat Conky's ${image} no-hot-reload. The Cairo port has
+-- no ${image} (blank conky.text), so a single reused cache filename
+-- is fine; the new constraint is that Cairo loads PNG only, so the
+-- cover (often JPEG via mpris:artUrl) is converted with ImageMagick
+-- when the track's art changes, into covers/current.png.
 
 local M = {}
 
-local HOME       = os.getenv("HOME") or ""
-local SUITE_ID   = os.getenv("GTEX62_SUITE_ID") or "clean-e"
-local CACHE_ROOT = os.getenv("GTEX62_CACHE_DIR") or os.getenv("GTEX62_CONKY_CACHE_DIR") or (HOME .. "/.cache/gtex62-core")
-local SUITE_CACHE_DIR = string.format("%s/suites/%s/msc", CACHE_ROOT, SUITE_ID)
-local COVER_CACHE_DIR = SUITE_CACHE_DIR .. "/covers"
+local HOME               = os.getenv("HOME") or ""
+local SUITE_ID           = os.getenv("GTEX62_SUITE_ID") or "clean-e"
+local DEFAULT_CACHE_ROOT = os.getenv("GTEX62_CACHE_DIR") or os.getenv("GTEX62_CONKY_CACHE_DIR") or (HOME .. "/.cache/gtex62-core")
+local RUNTIME_ROOT       = os.getenv("GTEX62_CONFIG_DIR") or os.getenv("GTEX62_CONKY_CONFIG_DIR") or (HOME .. "/.config/gtex62-core")
+local ASSETS_DIR         = os.getenv("GTEX62_SHARED_ASSETS_DIR") or (HOME .. "/.config/conky/gtex62-shared-assets")
 
-local PLAYER_CACHE = { tick = nil, data = nil }
+local FALLBACK_ART       = ASSETS_DIR .. "/icons/horn-of-odin.png"
+
+local function read_file(path)
+  if not path or path == "" then return nil end
+  local f = io.open(path, "r")
+  if not f then return nil end
+  local s = f:read("*a")
+  f:close()
+  return s
+end
 
 local function command_output(cmd)
   local p = io.popen(cmd, "r")
@@ -28,65 +52,137 @@ local function normalize_spaces(s)
   return (s or ""):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
-local function read_file(path)
-  if not path or path == "" then return nil end
-  local f = io.open(path, "r")
-  if not f then return nil end
-  local s = f:read("*a")
-  f:close()
-  return s
+local function parse_simple_toml(path)
+  local out     = {}
+  local section = nil
+  local s       = read_file(path)
+  if not s then return out end
+  for line in s:gmatch("[^\r\n]+") do
+    line = line:gsub("#.*$", ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if line ~= "" then
+      local sec = line:match("^%[([%w_%-]+)%]$")
+      if sec then
+        section      = sec
+        out[section] = out[section] or {}
+      else
+        local key, value = line:match("^([%w_%-]+)%s*=%s*(.+)$")
+        if key and value then
+          value = value:gsub('^"', ""):gsub('"$', "")
+          if section then
+            out[section][key] = value
+          else
+            out[key] = value
+          end
+        end
+      end
+    end
+  end
+  return out
 end
 
-local function half_second_stamp()
-  return math.floor(os.time() / 0.5)
-end
+-- Media profile: launcher default is "local" (gtex62-core-launch
+-- MEDIA_PROFILE fallback); suites/clean-e.toml [profiles] media
+-- overrides it if present.
+local MEDIA_PROFILE = (parse_simple_toml(RUNTIME_ROOT .. "/suites/clean-e.toml").profiles or {}).media or "local"
+local LYRICS_JSON   = string.format("%s/shared/media/%s/lyrics.json", DEFAULT_CACHE_ROOT, MEDIA_PROFILE)
+
+local SUITE_CACHE_DIR = string.format("%s/suites/%s/msc", DEFAULT_CACHE_ROOT, SUITE_ID)
+local COVER_DIR       = SUITE_CACHE_DIR .. "/covers"
+local COVER_PNG       = COVER_DIR .. "/current.png"
+
+----------------------------------------------------------------
+-- Player state (playerctl; 1 s tick cache — legacy update_interval 1)
+----------------------------------------------------------------
+
+local PLAYER_CACHE = { tick = nil, data = nil }
 
 local function read_player_state()
-  local tick = half_second_stamp()
+  local tick = os.time()
   if PLAYER_CACHE.tick == tick and PLAYER_CACHE.data ~= nil then
     return PLAYER_CACHE.data
   end
 
-  local status = command_output("playerctl status 2>/dev/null")
-  if not status or (status ~= "Playing" and status ~= "Paused") then
-    PLAYER_CACHE.data  = { active = false, status = status or "Stopped" }
-    PLAYER_CACHE.tick  = tick
+  -- One playerctl call for everything it can format; fails (nil) when
+  -- no MPRIS player exists.
+  local out = command_output(
+    "playerctl metadata --format '{{status}}\t{{title}}\t{{artist}}\t{{album}}\t{{position}}\t{{mpris:length}}\t{{volume}}\t{{mpris:artUrl}}' 2>/dev/null"
+  )
+
+  local status = ""
+  local parts  = {}
+  if out then
+    for field in (out .. "\t"):gmatch("([^\t]*)\t") do
+      parts[#parts + 1] = field
+    end
+    status = parts[1] or ""
+  end
+
+  if status ~= "Playing" and status ~= "Paused" then
+    -- Volume/mute still shown while idle (legacy drew the red marker
+    -- from the pactl fallback with no player running — see music1.png)
+    local volume_frac = nil
+    local pac = command_output("pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null")
+    local pct = pac and pac:match("(%d+)%%")
+    if pct then volume_frac = math.max(0, math.min(1, tonumber(pct) / 100)) end
+    local muted = nil
+    local mo = command_output("pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null")
+    if mo then
+      if mo:match("yes") then muted = true elseif mo:match("no") then muted = false end
+    end
+    PLAYER_CACHE.data = {
+      active      = false,
+      status      = (status ~= "" and status) or "Stopped",
+      volume_frac = volume_frac,
+      muted       = muted,
+    }
+    PLAYER_CACHE.tick = tick
     return PLAYER_CACHE.data
   end
 
-  local meta_out = command_output(
-    "playerctl metadata --format '{{title}}\t{{artist}}\t{{album}}\t{{position}}\t{{mpris:length}}' 2>/dev/null"
-  )
-  local title, artist, album, position_us, length_us = "", "", "", "0", "0"
-  if meta_out then
-    local parts = {}
-    for field in (meta_out .. "\t"):gmatch("([^\t]*)\t") do
-      parts[#parts + 1] = field
-    end
-    title      = normalize_spaces(parts[1] or "")
-    artist     = normalize_spaces(parts[2] or "")
-    album      = normalize_spaces(parts[3] or "")
-    position_us = parts[4] or "0"
-    length_us   = parts[5] or "0"
+  local title       = normalize_spaces(parts[2] or "")
+  local artist      = normalize_spaces(parts[3] or "")
+  local album       = normalize_spaces(parts[4] or "")
+  local position_us = tonumber(parts[5]) or 0
+  local length_us   = tonumber(parts[6]) or 0
+  local volume_raw  = tonumber(parts[7])
+  local art_url     = parts[8] or ""
+
+  -- playerctl volume is 0..1 (some players report 0..100)
+  local volume_frac = nil
+  if volume_raw then
+    if volume_raw > 1 then volume_raw = volume_raw / 100 end
+    volume_frac = math.max(0, math.min(1, volume_raw))
+  else
+    -- pactl fallback (legacy get_volume_frac)
+    local pac = command_output("pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null")
+    local pct = pac and pac:match("(%d+)%%")
+    if pct then volume_frac = math.max(0, math.min(1, tonumber(pct) / 100)) end
   end
 
-  local position_s = (tonumber(position_us) or 0) / 1e6
-  local length_s   = (tonumber(length_us) or 0)   / 1e6
+  -- Mute state (legacy get_is_muted; nil = unknown)
+  local muted = nil
+  local mo = command_output("pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null")
+  if mo then
+    if mo:match("yes") then muted = true elseif mo:match("no") then muted = false end
+  end
 
-  local volume_raw = command_output("playerctl volume 2>/dev/null")
-  local volume_pct = math.floor(((tonumber(volume_raw) or 1.0) * 100) + 0.5)
+  local position_s = position_us / 1e6
+  local length_s   = length_us / 1e6
+  if length_s < position_s then length_s = position_s end -- legacy guard
 
   local data = {
-    active       = true,
-    status       = status,
-    playing      = status == "Playing",
-    title        = title  ~= "" and title  or "Unknown",
-    artist       = artist ~= "" and artist or "Unknown",
-    album        = album  ~= "" and album  or "Unknown",
-    position_s   = position_s,
-    length_s     = length_s,
-    progress     = length_s > 0 and math.min(1.0, position_s / length_s) or 0,
-    volume_pct   = volume_pct,
+    active      = true,
+    status      = status,
+    playing     = status == "Playing",
+    title       = title,
+    artist      = artist,
+    album       = album,
+    position_s  = position_s,
+    length_s    = length_s,
+    progress    = length_s > 0 and math.min(1.0, position_s / length_s) or 0,
+    volume_frac = volume_frac,
+    muted       = muted,
+    art_url     = art_url,
   }
 
   PLAYER_CACHE.data = data
@@ -94,167 +190,179 @@ local function read_player_state()
   return data
 end
 
-local function cover_art_source_path()
-  return command_output("playerctl metadata mpris:artUrl 2>/dev/null | sed 's|^file://||'")
+function M.player()
+  return read_player_state()
 end
 
-local function mtime_str(path)
-  return command_output(string.format("stat -c %%Y %q 2>/dev/null", path))
+-- Format seconds as M:SS (legacy fmt_clock_ms)
+function M.fmt_clock(sec)
+  sec = tonumber(sec)
+  if not sec or sec <= 0 or sec ~= sec then return "0:00" end
+  local s = math.floor(sec + 0.5)
+  local m = math.floor(s / 60); s = s % 60
+  return string.format("%d:%02d", m, s)
 end
 
 ----------------------------------------------------------------
--- Public API: music
+-- Visibility linger (legacy conky_music_visible / conky_lyrics_visible:
+-- visible while Playing/Paused, stays for idle_hide_after_s after stop)
 ----------------------------------------------------------------
 
-function M.is_active()
-  return read_player_state().active
+local LAST_SEEN = os.time()
+
+function M.seen_within(idle_hide_after_s)
+  local now = os.time()
+  if read_player_state().active then
+    LAST_SEEN = now
+    return true
+  end
+  return (now - LAST_SEEN) < (tonumber(idle_hide_after_s) or 10)
 end
 
-function M.player_status()
-  return read_player_state().status or "Stopped"
+----------------------------------------------------------------
+-- Cover art (suite-local). Converts the current track's art to PNG
+-- (Cairo can only load PNG) at covers/current.png, re-converting only
+-- when the art source changes. Returns a PNG path, the fallback icon
+-- when idle / artless / conversion failed.
+----------------------------------------------------------------
+
+local COVER_STATE = { key = nil, path = nil }
+
+local function url_decode(s)
+  return (s:gsub("%%(%x%x)", function(h) return string.char(tonumber(h, 16)) end))
 end
 
-function M.is_playing()
-  return read_player_state().playing == true
-end
+function M.cover_path()
+  local p = read_player_state()
+  if not p.active then return FALLBACK_ART end
 
-function M.title()
-  return read_player_state().title or ""
-end
+  local url = p.art_url or ""
+  if url == "" then return FALLBACK_ART end
 
-function M.artist()
-  return read_player_state().artist or ""
-end
-
-function M.album()
-  return read_player_state().album or ""
-end
-
-function M.progress_fraction()
-  return read_player_state().progress or 0
-end
-
-function M.volume_percent()
-  return read_player_state().volume_pct or 100
-end
-
-function M.position_seconds()
-  return read_player_state().position_s or 0
-end
-
-function M.length_seconds()
-  return read_player_state().length_s or 0
-end
-
--- Returns the path of a uniquely-named cover copy that forces Conky's
--- ${image} directive to reload when the track changes.
--- Falls back to the suite's default icon if no cover art is available.
-local LAST_COVER_MTIME = nil
-local LAST_COVER_COPY  = nil
-
-function M.cover_art_path()
-  local src = cover_art_source_path()
-  local fallback = HOME .. "/.config/conky/gtex62-shared-assets/icons/horn-of-odin.png"
-
-  if not src or src == "" then
-    return read_file(fallback) and fallback or nil
+  local key = url
+  local src = nil
+  if url:match("^file://") then
+    src = url_decode(url:gsub("^file://", ""))
+    -- include mtime so an in-place art file update re-converts
+    local mt = command_output(string.format("stat -c %%Y %q 2>/dev/null", src))
+    key = url .. "@" .. (mt or "")
   end
 
-  local mt = mtime_str(src)
-  if mt and mt ~= LAST_COVER_MTIME then
-    local dest = string.format("%s/cover_%s.png", COVER_CACHE_DIR, mt)
-    command_output(string.format("mkdir -p %q && cp %q %q 2>/dev/null", COVER_CACHE_DIR, src, dest))
-    -- Prune old copies asynchronously.
-    command_output(string.format(
-      "find %q -name 'cover_*.png' -not -name 'cover_%s.png' -delete 2>/dev/null &",
-      COVER_CACHE_DIR, mt
-    ))
-    LAST_COVER_MTIME = mt
-    LAST_COVER_COPY  = dest
+  if COVER_STATE.key == key then
+    return COVER_STATE.path or FALLBACK_ART
   end
 
-  return LAST_COVER_COPY or src
+  command_output(string.format("mkdir -p %q 2>/dev/null; echo ok", COVER_DIR))
+  local ok = nil
+  if src then
+    -- local file (any format) → small PNG
+    ok = command_output(string.format(
+      "convert %q -resize '128x128>' png:%q 2>/dev/null && echo ok", src, COVER_PNG))
+  elseif url:match("^https?://") then
+    local tmp = COVER_DIR .. "/download.tmp"
+    ok = command_output(string.format(
+      "curl -LfsS --max-time 8 %q -o %q 2>/dev/null && convert %q -resize '128x128>' png:%q 2>/dev/null && rm -f %q && echo ok",
+      url, tmp, tmp, COVER_PNG, tmp))
+  end
+
+  COVER_STATE.key  = key
+  COVER_STATE.path = (ok == "ok") and COVER_PNG or FALLBACK_ART
+  return COVER_STATE.path
 end
 
 ----------------------------------------------------------------
--- Public API: lyrics
+-- Lyrics (core media domain). One jq call per tick against
+-- lyrics.json; blank runs collapsed to max_blank_run at display time
+-- (legacy normalize_blank_lines behavior — cheap and idempotent even
+-- if the provider already collapsed them).
 ----------------------------------------------------------------
 
-local LYRICS_CACHE = { tick = nil, lines = nil, artist = nil, title = nil }
+local LYRICS_CACHE = { tick = nil, data = nil }
 
-local function lyrics_cache_path(artist, title)
-  if not artist or artist == "" or not title or title == "" then return nil end
-  local safe = (artist .. "_" .. title):gsub("[^%w%-_]", "_"):gsub("_+", "_"):lower()
-  return string.format("%s/lyrics/%s.txt", SUITE_CACHE_DIR, safe)
-end
-
-local function normalize_lyrics(lines, max_blank_run)
-  local max_run = tonumber(max_blank_run) or 1
-  local out, blank_run = {}, 0
+local function collapse_blanks(lines, max_run)
+  max_run = tonumber(max_run) or 1
+  local out, run = {}, 0
   for _, line in ipairs(lines) do
-    local trimmed = line:gsub("^%s+", ""):gsub("%s+$", "")
-    if trimmed == "" then
-      blank_run = blank_run + 1
-      if blank_run <= max_run then out[#out + 1] = "" end
+    if line:match("^%s*$") then
+      run = run + 1
+      if run <= max_run then out[#out + 1] = "" end
     else
-      blank_run = 0
-      -- Strip LRC timestamps like [00:12.34]
-      trimmed = trimmed:gsub("%[%d+:%d+%.%d+%]", ""):gsub("^%s+", "")
-      out[#out + 1] = trimmed
+      run = 0
+      out[#out + 1] = line
     end
   end
+  -- drop leading/trailing blanks
+  while out[1] == "" do table.remove(out, 1) end
+  while out[#out] == "" do table.remove(out) end
   return out
 end
 
-function M.lyrics_lines(max_lines)
-  local limit  = tonumber(max_lines) or 60
-  local state  = read_player_state() or {}
-  local active = state.active or false
-  local artist = state.artist or ""
-  local title  = state.title  or ""
-  if not active then return { "(not playing)" } end
-  local tick   = math.floor(os.time() / 30)
-
-  if LYRICS_CACHE.tick == tick
-    and LYRICS_CACHE.artist == artist
-    and LYRICS_CACHE.title  == title
-    and LYRICS_CACHE.lines  ~= nil then
-    return LYRICS_CACHE.lines
-  end
-
-  local path = lyrics_cache_path(artist, title)
-  local content = path and read_file(path) or nil
-
-  local lines
-  if content then
-    local raw = {}
-    for line in (content .. "\n"):gmatch("([^\r\n]*)\r?\n") do raw[#raw + 1] = line end
-    lines = normalize_lyrics(raw, 1)
+-- Returns { state, artist, title, source, library_path, lines }.
+-- state passes through the provider's values (ok / inactive / no_track /
+-- not_found / offline / instrumental), plus "searching" when the live
+-- player track doesn't match lyrics.json's track yet (the provider's
+-- refresh cadence lags a track change; legacy showed "Searching…" while
+-- its own fetch was throttled — same user-facing meaning).
+function M.lyrics(max_blank_run)
+  local tick = math.floor(os.time() / 2)
+  local data
+  if LYRICS_CACHE.tick == tick and LYRICS_CACHE.data ~= nil then
+    data = LYRICS_CACHE.data
   else
-    lines = { "(lyrics not found)" }
+    data = { state = "inactive", artist = "", title = "", source = "", library_path = "", lines = {} }
+    -- Parens around the @tsv pipe matter: jq's comma binds tighter than
+    -- an unparenthesized trailing pipe target, so without them .lines
+    -- gets applied to the constructed header array (an error).
+    local out = command_output(string.format(
+      "jq -r '([.state // \"\", .track.artist // \"\", .track.title // \"\", .source // \"\", .library_path // \"\"] | @tsv), (.lines[]? | tostring)' %q 2>/dev/null",
+      LYRICS_JSON))
+    if out then
+      local first = true
+      local lines = {}
+      for line in (out .. "\n"):gmatch("([^\n]*)\n") do
+        if first then
+          local f = {}
+          for field in (line .. "\t"):gmatch("([^\t]*)\t") do f[#f + 1] = field end
+          data.state        = f[1] or ""
+          data.artist       = f[2] or ""
+          data.title        = f[3] or ""
+          data.source       = f[4] or ""
+          data.library_path = f[5] or ""
+          first = false
+        else
+          lines[#lines + 1] = line
+        end
+      end
+      data.lines = collapse_blanks(lines, max_blank_run or 1)
+    end
+    LYRICS_CACHE.tick = tick
+    LYRICS_CACHE.data = data
   end
 
-  if #lines > limit then
-    local truncated = {}
-    for i = 1, limit do truncated[i] = lines[i] end
-    lines = truncated
+  -- Track-change lag detection against the live player: whatever state
+  -- lyrics.json is in, if it isn't about the track playing NOW (covers
+  -- "inactive" right after playback starts, and a previous track's
+  -- ok/not_found), the provider just hasn't caught up yet.
+  local p = read_player_state()
+  if p.active
+      and (data.artist ~= (p.artist or "") or data.title ~= (p.title or "")) then
+    local copy = {}
+    for k, v in pairs(data) do copy[k] = v end
+    copy.state = "searching"
+    copy.lines = {}
+    return copy
   end
-
-  LYRICS_CACHE.tick   = tick
-  LYRICS_CACHE.artist = artist
-  LYRICS_CACHE.title  = title
-  LYRICS_CACHE.lines  = lines
-  return lines
+  return data
 end
 
+-- Header text from the LIVE player metadata (legacy fmt_header on
+-- playerctl meta — not from lyrics.json, so it is current even while
+-- the provider is catching up to a track change).
 function M.lyrics_header()
-  local state  = read_player_state() or {}
-  local active = state.active or false
-  local artist = state.artist or ""
-  local title  = state.title  or ""
-  if not active then return "" end
-  local a = artist ~= "" and artist or nil
-  local t = title  ~= "" and title  or nil
+  local p = read_player_state()
+  if not p.active then return "" end
+  local a = (p.artist ~= "" and p.artist) or nil
+  local t = (p.title ~= "" and p.title) or nil
   if a and t then return string.format("%s — %s", a, t) end
   return t or a or ""
 end

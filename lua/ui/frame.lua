@@ -97,16 +97,6 @@ local function draw_text_block_left(cr, x, y, lines, face, pt, color, step, weig
 end
 
 ----------------------------------------------------------------
--- Bar and table helpers
-----------------------------------------------------------------
-
-local function draw_hbar(cr, x, y, w, h, ratio, color)
-  local fw = math.floor(w * clamp01(ratio) + 0.5)
-  if fw <= 0 then return end
-  fill_rect(cr, x, y, fw, h, color)
-end
-
-----------------------------------------------------------------
 -- SYS + NET content (Monitor chassis)
 --
 -- Legacy clean-suite sys-info + net-sys stack rendered as one
@@ -778,76 +768,237 @@ end
 
 ----------------------------------------------------------------
 -- MSC content (Media chassis)
+--
+-- Legacy clean-suite music.lua composition: HR baseline, mirrored
+-- "smile" arc (geometry derived from the horizon arc — see panels.msc),
+-- played trail (arc_night gray), progress dot (accent), red volume
+-- marker (dimmed when muted), endpoint time labels (elapsed /
+-- −remaining), album art in the bowl, and title/album/artist centered
+-- on the arc axis with per-line marquee for overlong text.
+--
+-- Smile mapping: math angles run start(180°, left) → end(0°, right);
+-- fraction t interpolates linearly. The vertical mirror (legacy flip
+-- transform) reduces to ADDING the sine term in Cairo's y-down frame:
+-- point(θ) = (cx + r·cosθ, cy + r·sinθ).
 ----------------------------------------------------------------
+
+-- Baseline-anchored centered text (legacy draw_text_centered: y is the
+-- text baseline, unlike draw_text_center_mid's vertical-mid anchor).
+local function draw_text_center_base(cr, x, y, txt, face, pt, color, weight)
+  if not txt or txt == "" then return end
+  set_rgb(cr, color)
+  cairo_select_font_face(cr, face, CAIRO_FONT_SLANT_NORMAL, weight or CAIRO_FONT_WEIGHT_NORMAL)
+  cairo_set_font_size(cr, pt)
+  local ext = cairo_text_extents_t:create()
+  cairo_text_extents(cr, txt, ext)
+  cairo_move_to(cr, x - (ext.width / 2 + ext.x_bearing), y)
+  cairo_show_text(cr, txt)
+end
+
+-- Aspect-fit PNG draw, centered on (cx, cy) in a w×h box.
+local function draw_png_fit(cr, path, cx, cy, w, h)
+  if not path or path == "" then return end
+  local img = cairo_image_surface_create_from_png(path)
+  if not img then return end
+  if cairo_surface_status(img) ~= 0 then
+    cairo_surface_destroy(img)
+    return
+  end
+  local iw = cairo_image_surface_get_width(img)
+  local ih = cairo_image_surface_get_height(img)
+  if iw < 1 or ih < 1 then
+    cairo_surface_destroy(img)
+    return
+  end
+  local s = math.min(w / iw, h / ih)
+  cairo_save(cr)
+  cairo_translate(cr, cx - iw * s / 2, cy - ih * s / 2)
+  cairo_scale(cr, s, s)
+  cairo_set_source_surface(cr, img, 0, 0)
+  cairo_paint(cr)
+  cairo_restore(cr)
+  cairo_surface_destroy(img)
+end
+
+-- Centered line with marquee scroll when wider than field_w (legacy
+-- draw_line_with_marquee; time-based offset replaces the ${updates}
+-- counter — equivalent at the 1 s update interval, no conky_parse).
+local function draw_marquee_center(cr, txt, cx, y, face, pt, color, field_w, speed)
+  if not txt or txt == "" then return end
+  set_rgb(cr, color)
+  cairo_select_font_face(cr, face, CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL)
+  cairo_set_font_size(cr, pt)
+  local ext = cairo_text_extents_t:create()
+  cairo_text_extents(cr, txt, ext)
+
+  local field_left = cx - field_w / 2
+  if ext.width <= field_w then
+    cairo_move_to(cr, field_left + (field_w - ext.width) / 2 - ext.x_bearing, y)
+    cairo_show_text(cr, txt)
+    return
+  end
+
+  local safety = math.ceil(ext.width * 0.15) -- legacy auto buffer
+  local period = ext.width + safety
+  local offset = (os.time() * (speed or 2)) % period
+
+  cairo_save(cr)
+  cairo_rectangle(cr, field_left, y - (pt + 6), field_w, (pt * 2) + 12)
+  cairo_clip(cr)
+  local start_x = field_left - offset
+  for k = 0, 1 do
+    cairo_move_to(cr, start_x + k * period + (field_w - ext.width) / 2 - ext.x_bearing, y)
+    cairo_show_text(cr, txt)
+  end
+  cairo_restore(cr)
+end
 
 local function draw_msc_content(cr, theme, panels, data)
   local panel = panels.msc
   local msc   = data and data.msc
   if not (panel and msc) then return end
 
-  local colors    = theme.colors
-  local fonts     = theme.fonts
-  local arc_cfg   = panel.arc or {}
+  local colors  = theme.colors
+  local mono    = theme.fonts.mono or "DejaVu Sans Mono"
+  local mtheme  = theme.msc or {}
+  local arc_cfg = panel.arc or {}
 
-  local r         = tonumber(arc_cfg.r) or 140
-  local dy        = tonumber(arc_cfg.dy) or 50
-  local cx        = panel.x + panel.width / 2
-  local cy        = panel.y + dy
+  local r       = tonumber(arc_cfg.r) or 170
+  local a0      = tonumber(arc_cfg.start) or 180 -- left endpoint (math degrees)
+  local a1      = tonumber(arc_cfg["end"]) or 0  -- right endpoint
+  local cx      = panel.x + panel.width / 2
+  local cy      = panel.y + (tonumber(arc_cfg.dy) or 204)
 
-  local is_active = type(msc.is_active) == "function" and msc.is_active()
-  local progress  = type(msc.progress_fraction) == "function" and msc.progress_fraction() or 0
+  local p       = msc.player()
+  local active  = p.active == true
 
-  -- Smile arc base (cairo_arc_negative: CW from 200° to -20° through 270°)
-  set_rgb(cr, is_active and colors.fg or colors.dim)
-  cairo_set_line_width(cr, theme.strokes.arc or 2.0)
+  -- Point on the mirrored smile at fraction t (0 = left/start end)
+  local function smile_xy(t)
+    local theta = math.rad(a0 + (a1 - a0) * t)
+    return cx + r * math.cos(theta), cy + r * math.sin(theta)
+  end
+
+  local thin = theme.strokes.line or 0.5 -- legacy music.baseline.weight drove BOTH strokes
+
+  -- HR baseline above the arc
+  do
+    local bl = panel.baseline or {}
+    local by = cy + (tonumber(bl.dy) or -45)
+    local half = (tonumber(bl.length) or 460) / 2
+    cairo_set_line_width(cr, thin)
+    set_rgb(cr, colors.ink)
+    cairo_move_to(cr, cx - half, by)
+    cairo_line_to(cr, cx + half, by)
+    cairo_stroke(cr)
+  end
+
+  -- Base smile arc (ink gray, thin — the legacy widget drew arc and
+  -- baseline with the same 0.5 stroke)
+  cairo_set_line_width(cr, thin)
+  set_rgb(cr, colors.ink)
   cairo_new_sub_path(cr)
-  cairo_arc_negative(cr, cx, cy, r, math.rad(200), math.rad(-20))
+  cairo_arc(cr, cx, cy, r, math.rad(math.min(a0, a1)), math.rad(math.max(a0, a1)))
   cairo_stroke(cr)
 
-  -- Progress marker on arc
-  -- arc_negative sweeps from 200° to -20° (=340°) CW, total 220°
-  -- fraction 0 → 200°, fraction 1 → -20°
-  if is_active and progress and progress > 0 then
-    local angle_deg = 200 - progress * 220
-    local angle_rad = math.rad(angle_deg)
-    local mx = cx + r * math.cos(angle_rad)
-    local my = cy + r * math.sin(angle_rad)
-    set_rgb(cr, colors.accent or colors.fg)
+  -- Played trail: left endpoint → progress angle, arc_night gray by
+  -- deliberate convention (near-invisible on dark bg, like legacy)
+  local progress = active and (p.progress or 0) or 0
+  if progress > 0 then
+    set_rgb(cr, mtheme.trail_color or colors.dim)
     cairo_new_sub_path(cr)
-    cairo_arc(cr, mx, my, 5, 0, 2 * math.pi)
+    local prog_deg = a0 + (a1 - a0) * progress
+    -- sweep between prog_deg and a0 along the bowl
+    cairo_arc(cr, cx, cy, r, math.rad(math.min(prog_deg, a0)), math.rad(math.max(prog_deg, a0)))
+    cairo_stroke(cr)
+  end
+
+  -- Progress dot (accent)
+  do
+    local mx, my = smile_xy(progress)
+    set_rgb(cr, colors.accent)
+    cairo_new_sub_path(cr)
+    cairo_arc(cr, mx, my, (tonumber((panel.marker or {}).d) or 20) / 2, 0, 2 * math.pi)
     cairo_fill(cr)
   end
 
-  -- Text labels
-  local txt_cfg   = panel.text or {}
-  local title_cfg = txt_cfg.title or {}
-  local album_cfg = txt_cfg.album or {}
-  local art_cfg   = txt_cfg.artist or {}
-  local art_xy    = panel.art or {}
+  -- Volume marker (red fixed convention; dimmed when muted)
+  if p.volume_frac then
+    local vx, vy = smile_xy(p.volume_frac)
+    local vc = mtheme.volume_color or { 1, 0, 0, 1 }
+    local alpha = 1.0
+    if p.muted == true then alpha = tonumber(mtheme.muted_alpha) or 0.35 end
+    cairo_set_source_rgba(cr, vc[1], vc[2], vc[3], alpha)
+    cairo_new_sub_path(cr)
+    cairo_arc(cr, vx, vy, (tonumber((panel.volume_marker or {}).d) or 16) / 2, 0, 2 * math.pi)
+    cairo_fill(cr)
+  end
 
-  local art_cx    = cx + (tonumber(art_xy.dx) or 0)
-  local art_cy    = cy + (tonumber(art_xy.dy) or -13)
+  -- Endpoint time labels: elapsed at the start end, −remaining at the
+  -- end end (baselines above arc center per time_labels.dy)
+  do
+    local tl = panel.time_labels or {}
+    local ly = cy + (tonumber(tl.dy) or -18)
+    local lp = tonumber(tl.pt) or 18
+    local sx = select(1, smile_xy(0))
+    local ex = select(1, smile_xy(1))
+    local elapsed = msc.fmt_clock(active and p.position_s or 0)
+    local remain  = "-" .. msc.fmt_clock(active and (p.length_s - p.position_s) or 0)
+    draw_text_center_base(cr, sx, ly, elapsed, mono, lp, colors.ink)
+    draw_text_center_base(cr, ex, ly, remain, mono, lp, colors.ink)
+  end
 
-  if is_active then
-    local title  = type(msc.title) == "function" and msc.title() or ""
-    local album  = type(msc.album) == "function" and msc.album() or ""
-    local artist = type(msc.artist) == "function" and msc.artist() or ""
+  -- Idle bars (legacy animate_idle — disabled in the final legacy
+  -- theme; kept implemented for easy revival)
+  do
+    local bars = panel.bars or {}
+    if bars.animate_idle == true and not active then
+      local n      = tonumber(bars.count) or 48
+      local bw     = tonumber(bars.width) or 6
+      local max_h  = tonumber(bars.max_height) or 68
+      local left   = select(1, smile_xy(0))
+      local right  = select(1, smile_xy(1))
+      if left > right then left, right = right, left end
+      local span   = right - left
+      local gap    = (n > 1) and (span - n * bw) / (n - 1) or 0
+      if gap < 1 then gap = 1 end
+      local base_y = cy - (tonumber(bars.lift_px) or 48)
+      local phase0 = os.time() * ((tonumber(bars.speed) or 2) * 0.05)
+      set_rgb(cr, colors.accent)
+      for i = 0, n - 1 do
+        local phase = i * (2 * math.pi / n) + phase0
+        local h = math.max(1, max_h * ((0.5 + 0.5 * math.sin(phase)) ^ 1.2) * 0.6)
+        cairo_rectangle(cr, left + i * (bw + gap), base_y - h, bw, h)
+        cairo_fill(cr)
+      end
+    end
+  end
 
-    draw_text_center_mid(cr, art_cx, art_cy + (tonumber(title_cfg.dy) or -6),
-      title, fonts.data, tonumber(title_cfg.pt) or 15, colors.fg)
-    draw_text_center_mid(cr, art_cx, art_cy + (tonumber(album_cfg.dy) or 18),
-      album, fonts.data, tonumber(album_cfg.pt) or 11, colors.dim)
-    draw_text_center_mid(cr, art_cx, art_cy + (tonumber(art_cfg.dy) or 128),
-      artist, fonts.data, tonumber(art_cfg.pt) or 14, colors.fg)
+  -- Album art in the bowl (fallback icon when idle/artless — legacy
+  -- showed horn-of-odin while idle since hide_when_inactive = false)
+  do
+    local art = panel.art or {}
+    draw_png_fit(cr, msc.cover_path(),
+      cx, cy + (tonumber(art.dy) or 68),
+      tonumber(art.w) or 88, tonumber(art.h) or 88)
+  end
 
-    -- Progress bar at panel bottom
-    local bar_w = panel.width - 36
-    local bar_x = panel.x + 18
-    local bar_y = panel.y + panel.height - 16
-    draw_rect(cr, bar_x, bar_y, bar_w, 4, theme.strokes.line, colors.dim)
-    draw_hbar(cr, bar_x, bar_y, bar_w, 4, progress, colors.fg)
-  else
-    draw_text_center_mid(cr, cx, cy + 24, "IDLE", fonts.data, theme.sizes.data, colors.dim)
+  -- Title / album / artist, centered on the arc axis (baselines
+  -- relative to arc center; idle shows the inactive message as title)
+  do
+    local t = panel.text or {}
+    local tc, ac, rc = t.title or {}, t.album or {}, t.artist or {}
+    local title = active and ((p.title ~= "" and p.title) or "00 - Title")
+        or (panel.inactive_message or "Play music, feel better")
+    draw_marquee_center(cr, title, cx, cy + (tonumber(tc.dy) or -6), mono,
+      tonumber(tc.pt) or 15, colors.fg, tonumber(tc.field_w) or 250, tc.speed)
+    if active and p.album ~= "" then
+      draw_marquee_center(cr, p.album, cx, cy + (tonumber(ac.dy) or 18), mono,
+        tonumber(ac.pt) or 11, colors.fg, tonumber(ac.field_w) or 280, ac.speed)
+    end
+    if active and p.artist ~= "" then
+      draw_marquee_center(cr, p.artist, cx, cy + (tonumber(rc.dy) or 128), mono,
+        tonumber(rc.pt) or 14, colors.fg, tonumber(rc.field_w) or 200, rc.speed)
+    end
   end
 end
 
@@ -878,6 +1029,12 @@ end
 
 ----------------------------------------------------------------
 -- LYRICS content (Media chassis)
+--
+-- Display-only port of legacy lyrics.lua: all fetching/library logic
+-- moved to the core media provider; this maps lyrics.json states to
+-- the legacy messages, truncates with the more-marker, and shows the
+-- saved-path footer for freshly-fetched tracks. Hidden when the
+-- player is inactive (10 s linger), like the legacy window.
 ----------------------------------------------------------------
 
 local function draw_lyrics_content(cr, theme, panels, data)
@@ -885,32 +1042,98 @@ local function draw_lyrics_content(cr, theme, panels, data)
   local msc   = data and data.msc
   if not (panel and msc) then return end
 
+  -- Visibility: legacy hide_when_inactive + idle linger
+  if panel.hide_when_inactive ~= false and not msc.seen_within(panel.idle_hide_after_s) then
+    return
+  end
+
   local colors  = theme.colors
-  local fonts   = theme.fonts
+  local mono    = theme.fonts.mono or "DejaVu Sans Mono"
   local pad     = panel.padding or {}
   local hdr_cfg = panel.header or {}
   local body_c  = panel.body or {}
+  local msgs    = panel.messages or {}
 
-  local pt_hdr  = tonumber(hdr_cfg.pt) or 14
-  local pt_body = tonumber(body_c.pt) or 12
-  local line_px = tonumber(body_c.line_px) or 15
+  local pt_hdr  = tonumber(hdr_cfg.pt) or 18
+  local pt_body = tonumber(body_c.pt) or 14
+  local line_px = tonumber(body_c.line_px) or 16
 
   local x       = panel.x + (tonumber(pad.left) or 10)
   local y       = panel.y + (tonumber(pad.top) or 10)
 
-  if hdr_cfg.enabled ~= false and type(msc.lyrics_header) == "function" then
+  local player  = msc.player()
+
+  -- Header from the live player (legacy: header off while inactive)
+  if hdr_cfg.enabled ~= false and player.active then
     local hdr = msc.lyrics_header()
     if hdr and hdr ~= "" then
-      draw_text_left(cr, x, y + pt_hdr, hdr, fonts.data, pt_hdr, colors.fg, CAIRO_FONT_WEIGHT_BOLD)
+      draw_text_left(cr, x, y + pt_hdr, hdr, mono, pt_hdr, colors.fg,
+        hdr_cfg.bold and CAIRO_FONT_WEIGHT_BOLD or nil)
       y = y + pt_hdr + 8
     end
   end
 
+  set_rgb(cr, colors.fg)
+  cairo_select_font_face(cr, mono, CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL)
+  cairo_set_font_size(cr, pt_body)
+
+  -- Idle body message (only reachable when hide_when_inactive = false)
+  if not player.active then
+    draw_text_left(cr, x, y + pt_body, msgs.inactive or "", mono, pt_body, colors.fg)
+    return
+  end
+
+  local L = msc.lyrics(panel.max_blank_run)
+
+  -- State → message (single-line bodies)
+  local state_msg = nil
+  if L.state == "searching" then
+    state_msg = msgs.searching or "Searching…"
+  elseif L.state == "offline" then
+    state_msg = msgs.offline or "Offline"
+  elseif L.state == "instrumental" then
+    state_msg = msgs.instrumental or "Instrumental"
+  elseif L.state ~= "ok" then
+    -- not_found / no_track / inactive-with-active-player / anything else
+    state_msg = msgs.not_found or "Lyrics not found"
+  end
+  if state_msg then
+    draw_text_left(cr, x, y + pt_body, state_msg, mono, pt_body, colors.fg)
+    return
+  end
+
+  -- Saved-path footer: shown when this track's lyrics came from an
+  -- online fetch (source ≠ local) — legacy show_saved_path behavior;
+  -- once write-through promotes the track to the library, later reads
+  -- are source = local and the footer disappears, same as legacy.
+  local show_footer = (panel.show_saved_path == true)
+      and L.source ~= "" and L.source ~= "local"
+      and L.library_path ~= ""
+  local footer_pt = math.max(9, pt_body - 1)
+  local footer_px = tonumber(body_c.line_px) or (footer_pt + 3)
+
   local avail_h = panel.height - (y - panel.y) - (tonumber(pad.bottom) or 10)
+      - (show_footer and footer_px or 0)
   local max_l   = math.max(1, math.floor(avail_h / line_px))
-  local lines   = type(msc.lyrics_lines) == "function" and msc.lyrics_lines(max_l) or {}
-  for i, line in ipairs(lines) do
-    draw_text_left(cr, x, y + (i - 1) * line_px + pt_body, line, fonts.data, pt_body, colors.fg)
+
+  local lines   = L.lines or {}
+  local total   = #lines
+  local shown   = math.min(total, max_l)
+  for i = 1, shown do
+    local line = lines[i]
+    if i == shown and total > max_l then
+      line = panel.more_marker or "…more…"
+    end
+    draw_text_left(cr, x, y + (i - 1) * line_px + pt_body, line, mono, pt_body, colors.fg)
+  end
+
+  if show_footer then
+    local fy = y + avail_h + footer_pt
+    cairo_set_source_rgba(cr, colors.fg[1], colors.fg[2], colors.fg[3], 0.75)
+    cairo_select_font_face(cr, mono, CAIRO_FONT_SLANT_NORMAL, CAIRO_FONT_WEIGHT_NORMAL)
+    cairo_set_font_size(cr, footer_pt)
+    cairo_move_to(cr, x, fy)
+    cairo_show_text(cr, (panel.saved_prefix or "Saved to: ") .. L.library_path)
   end
 end
 

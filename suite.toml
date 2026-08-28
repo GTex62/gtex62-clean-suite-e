@@ -67,6 +67,8 @@ optional    = true
 # network and connectivity feed the NET chassis panel.
 # astro and aviation feed the ambient chassis ORB and WXR panels.
 # air (AQI) is reserved for a future ENV sub-panel; add it back when implemented.
+# media feeds the LYRICS panel (lyrics.json); playback state and cover art
+# stay suite-local (playerctl at draw time).
 domains = [
   "system",
   "weather",
@@ -75,4 +77,5 @@ domains = [
   "network",
   "connectivity",
   "pfsense",
+  "media",
 ]

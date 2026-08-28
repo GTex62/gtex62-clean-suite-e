@@ -1,6 +1,7 @@
 ---@diagnostic disable: undefined-global, lowercase-global
 -- lua/widgets/clean_media.lua
--- Lua draw entrypoint for the Media chassis (MSC + NOTES + LYRICS).
+-- Lua draw entrypoint for the Media chassis (MSC + LYRICS; notes is a
+-- standalone window — see clean_notes.lua).
 -- Loaded by widgets/clean-media.conky.conf via lua_load.
 -- conky_draw_media() is called each frame via lua_draw_hook_pre.
 

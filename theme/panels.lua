@@ -209,44 +209,75 @@ panels.cal = {
 }
 
 ----------------------------------------------------------------
--- MEDIA CHASSIS  (580 × 1300)
+-- MEDIA CHASSIS  (1700 × 1340)
+-- One top_middle window covering both legacy windows' measured
+-- rendered footprints — see layout.media for the window math.
 ----------------------------------------------------------------
 
--- MSC — now-playing arc, album art, bars, title/artist/album
+-- MSC — now-playing "smile" arc, album art, markers, title/album/artist.
+--
+-- DERIVED GEOMETRY — deliberate legacy relationship, preserved by
+-- reference (2026-08-28): the legacy music widget mirrors the weather
+-- arc exactly — legacy music.lua's get_arc_geometry_weather() read
+-- theme.weather.* (center auto_x, center.y, arc r/start/end) at draw
+-- time; theme.music.arc's own r=140/200→-20 values were dead config
+-- and are deliberately NOT carried forward. The arc fields below
+-- REFERENCE panels.orb.arc (and the baseline length references
+-- panels.wxr.hline) instead of repeating numbers, so a future
+-- ambient-arc retune propagates here automatically on reload.
+-- The arc center x is panel.width/2 (legacy center_mode auto_x): with
+-- the chassis top_middle and this panel full-width, the music arc axis
+-- renders at the same x as the ambient arc axis (both use the shared
+-- panel-width/2 convention; measured 5755 physical for both).
 panels.msc = {
   title              = "MSC",
-  x                  = 18,
-  y                  = 24,
-  width              = 544,
-  height             = 290,
-  hide_when_inactive = false,
+  x                  = 0,
+  y                  = 326, -- arc center abs y 938 = window_top 408 + y + arc.dy
+  width              = 1700,
+  height             = 400, -- same arc band height as panels.orb
+  hide_when_inactive = false, -- legacy: music widget always visible
   idle_hide_after_s  = 10,
-  -- Arc geometry relative to panel center
+  inactive_message   = "Play music, feel better",
   arc                = {
-    center_mode = "auto_x",
-    dy          = 50, -- smile arc offset (pushes arc downward)
-    r           = 140,
-    start       = 200,
-    ["end"]     = -20,
+    -- Mirrored smile: same values as the horizon arc, by reference.
+    r       = panels.orb.arc.r,
+    start   = panels.orb.arc.start,  -- 180 = left endpoint (elapsed side)
+    ["end"] = panels.orb.arc["end"], -- 0 = right endpoint (remaining side)
+    dy      = panels.orb.arc.dy,     -- center-y below panel top (legacy weather.center.y)
   },
+  baseline           = {
+    dy     = -45,                     -- HR line above arc center (legacy music.baseline.dy)
+    length = panels.wxr.hline.length, -- 460 — mirrors the weather hline, by reference
+  },
+  time_labels        = { pt = 18, dy = -18 }, -- baselines above arc center (legacy music.time_labels)
+  marker             = { d = 20 },            -- progress dot (palette accent)
+  volume_marker      = { d = 16 },            -- red by fixed convention (theme.msc)
+  -- Idle bar animation: present in the legacy code but disabled in the
+  -- final legacy theme (animate_idle = false; music2.png shows it on).
+  -- Kept implemented + disabled for easy revival, pfSense-baseline style.
   bars               = {
+    animate_idle = false,
     count        = 48,
     width        = 6,
     max_height   = 68,
     lift_px      = 48,
-    animate_idle = false,
+    speed        = 2, -- px per second of phase advance (legacy speed_px_u)
   },
-  -- Album art relative to arc anchor center
-  art                = {
-    dx = 0,
-    dy = -13,
-    w  = 62,
-    h  = 60,
-  },
+  -- Album art box, centered on the arc axis, aspect-fit. The legacy
+  -- theme's art placement (62×60 at arc-center −13) never matched what
+  -- ${image} actually rendered (measured 2026-08-28: -p/-s were not
+  -- honored as configured; accepted screenshots show ~88px art seated
+  -- in the arc bowl between the album and artist lines). The Cairo
+  -- port draws that accepted composition deterministically.
+  art                = { dy = 68, w = 88, h = 88 }, -- box center at arc-center + dy
   text               = {
-    title  = { pt = 15, dy = -6, field_w = 250 },
-    album  = { pt = 11, dy = 18, field_w = 280 },
-    artist = { pt = 14, dy = 128, field_w = 200 },
+    -- Baselines relative to the ARC CENTER (legacy passed arc cy, not
+    -- the art anchor, into draw_line_with_marquee); centered on the
+    -- arc axis; marquee when wider than field_w (speed = px/second,
+    -- legacy speed_px_u at update_interval 1).
+    title  = { pt = 15, dy = -6, field_w = 250, speed = 18 },
+    album  = { pt = 11, dy = 18, field_w = 280, speed = 4 },
+    artist = { pt = 14, dy = 128, field_w = 200, speed = 12 },
   },
 }
 
@@ -273,28 +304,46 @@ panels.notes = {
   },
 }
 
--- LYRICS — current track lyrics
+-- LYRICS — current-track lyrics from the CORE media domain
+-- (shared/media/[profile]/lyrics.json; no suite-side fetching — see
+-- lua/suite/msc.lua and gtex62-core/docs/lyrics-library-design.md).
+-- LRC timestamps are stripped provider-side, so the legacy
+-- strip_lrc_timestamps flag has no suite-side equivalent anymore.
+-- Position reproduces the measured rendered position of the running
+-- legacy music-lyrics window (2026-08-28: window at physical (6201,413)
+-- sized 795×1324, text left 6211, header baseline 441 — the conf's
+-- gap −600,300 / 560×940 were NOT the rendered truth, same pitfall as
+-- calendar/notes/monitor). In-chassis: text left = window_left(4905)
+-- + x + padding.left; header baseline = window_top(408) + y +
+-- padding.top + header.pt.
 panels.lyrics = {
-  title                 = "LYRICS",
-  x                     = 18,
-  y                     = 930,
-  width                 = 544,
-  height                = 346,
-  hide_when_inactive    = true,
-  idle_hide_after_s     = 10,
-  normalize_blank_lines = true,
-  max_blank_run         = 1,
-  strip_lrc_timestamps  = true,
-  padding               = { left = 10, top = 10, right = 10, bottom = 10 },
-  header                = {
-    enabled = true,
-    format  = "{artist} — {title}",
-    pt      = 14,
+  title              = "LYRICS",
+  x                  = 1296,
+  y                  = 5,
+  width              = 400,
+  height             = 1324, -- legacy rendered window height; sets max body lines
+  hide_when_inactive = true, -- legacy theme.lyrics (10 s linger after stop)
+  idle_hide_after_s  = 10,
+  max_blank_run      = 1,    -- collapse blank-line runs (legacy normalize_blank_lines)
+  padding            = { left = 10, top = 10, right = 10, bottom = 10 },
+  header             = {
+    enabled = true, -- "{artist} — {title}" from the live player
+    pt      = 18,
     bold    = true,
   },
-  body                  = {
-    pt      = 12,
-    line_px = 15,
+  body               = {
+    pt      = 14,
+    line_px = 16,
+  },
+  more_marker        = "…more…",
+  show_saved_path    = true, -- footer when the track was fetched online this cycle
+  saved_prefix       = "Saved to: ",
+  messages           = {
+    inactive     = "Lyrics can make the song, don't you think?",
+    offline      = "Offline",
+    not_found    = "Lyrics not found",
+    instrumental = "Instrumental",
+    searching    = "Searching…", -- provider hasn't caught up to a track change yet
   },
 }
 
