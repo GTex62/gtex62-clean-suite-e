@@ -25,10 +25,11 @@ palettes["default"] = {
   net_up   = { 1.00, 0.69, 0.00, 1.00 }, -- #FFB000 upload
   net_down = { 0.00, 0.84, 1.00, 1.00 }, -- #00D7FF download
 
-  -- pfSense VLAN arc flow colors (inbound / outbound fill)
+  -- pfSense VLAN flow arcs. Direction is encoded by marker shape
+  -- (filled IN / hollow OUT), per-VLAN marker colors are fixed
+  -- conventions in clean-theme.lua (theme.pf_markers) — so the only
+  -- palette role here is the base arc stroke.
   pf_arc_base = { 0.65, 0.65, 0.65, 1.00 }, -- base arc stroke (gray65)
-  pf_arc_in   = { 0.35, 0.75, 1.00, 1.00 }, -- inbound fill  (SteelBlue1)
-  pf_arc_out  = { 1.00, 0.55, 0.25, 1.00 }, -- outbound fill (sienna1)
 }
 
 -- Dark variant: cooler, more blue-shifted background with teal accent.
@@ -49,8 +50,6 @@ palettes["dark"] = {
   net_down = { 0.20, 0.90, 0.80, 1.00 },
 
   pf_arc_base = { 0.55, 0.55, 0.60, 1.00 },
-  pf_arc_in   = { 0.20, 0.90, 0.80, 1.00 },
-  pf_arc_out  = { 1.00, 0.55, 0.25, 1.00 },
 }
 
 return palettes

@@ -9,113 +9,202 @@
 local panels = {}
 
 ----------------------------------------------------------------
--- MONITOR CHASSIS  (420 × 1060)
+-- MONITOR CHASSIS  (598 × 1880)
+-- Legacy sys-info + net-sys stack rendered as one continuous text
+-- flow (the accepted conky.text layout, now drawn in Cairo). All
+-- metrics below were measured off the running Conky-text widget at
+-- this machine's font DPI: mono size=10 rendered 18 px glyphs
+-- (char advance ~10.85), 23 px line height, goto 260/185 columns
+-- landing at x 368/262.
 ----------------------------------------------------------------
 
--- SYS — CPU / RAM / GPU / top processes
+-- Shared character grid for the monitor text flow
+panels.monitor_grid = {
+  x0             = 7,     -- left text margin
+  first_baseline = 24,    -- baseline of line 1
+  line_px        = 23,    -- vertical advance per text line
+  font_px        = 18,    -- mono font size (px)
+  char_px        = 10.85, -- mono char advance at font_px
+}
+
+-- SYS — OS/host header, disk table, CPU/RAM/GPU slash bars,
+-- top-5 process rows, hardware id footer
 panels.sys = {
-  title  = "SYS",
-  x = 18, y = 24, width = 384, height = 500,
-  boxes = {
-    cpu       = { x = 12, y =  60, width = 360, height = 160 }, -- slash bars + top label
-    ram       = { x = 12, y = 234, width = 360, height =  60 },
-    gpu       = { x = 12, y = 306, width = 360, height =  60 },
-    processes = { x = 12, y = 380, width = 360, height = 108 }, -- top-5 process rows
-  },
+  title        = "SYS",
+  pipe_x       = 368, -- "|" column for process/GPU rows (legacy goto 260)
+  name_indent  = 4,   -- chars of indent before process names
+  name_max     = 26,  -- process name trim (legacy topname 26)
+  disk_val_col = 11,  -- char column where disk table values start
+  sep_count    = 50,  -- separator dash count (theme.sep)
 }
 
--- NET — interface, WAN IP, throughput graph, VLAN gateway status
+-- NET — interface/WAN/LAN/DNS rows, pings, VLAN gateway list,
+-- live throughput graphs
 panels.net = {
-  title  = "NET",
-  x = 18, y = 542, width = 384, height = 494,
-  boxes = {
-    iface  = { x = 12, y =  48, width = 360, height =  40 }, -- iface name + IP
-    wan    = { x = 12, y =  96, width = 360, height =  40 }, -- WAN IP
-    graph  = { x = 12, y = 148, width = 360, height =  80 }, -- up/down graph
-    status = { x = 12, y = 244, width = 360, height = 220 }, -- VLAN gateway rows
-  },
+  title       = "NET",
+  value_x     = 262,                                  -- value column (legacy goto 185)
+  vlan_gw_col = 14,                                   -- char col of "Gateway:" (legacy "%-13s " name field)
+  vlan_ip_col = 23,                                   -- char col of the gateway IP
+  vlan_ms_col = 36,                                   -- char col of the "(N ms)" rtt
+  graph       = { x = 5, width = 531, height = 112 }, -- legacy 80px at DPI scale
 }
 
 ----------------------------------------------------------------
--- AMBIENT CHASSIS  (680 × 820)
+-- AMBIENT CHASSIS  (680 × 770)
+-- Legacy vertical stack (all coordinates chassis-relative; the
+-- chassis top sits at the legacy date-time gap_y=40 position):
+--   clock stack   y   0..90   (legacy date-time widget)
+--   weather block y  90..745  (legacy weather widget; its internal
+--                              offsets are relative to arc center at
+--                              y = 90 + 204 = 294, matching legacy
+--                              weather.center.y = 204)
+-- The calendar is a standalone top_right window (panels.cal),
+-- matching the legacy suite — it does not live in this chassis.
 ----------------------------------------------------------------
 
--- WXR — current conditions, forecast strip, METAR, TAF
+-- WXR — current conditions in arc interior, forecast tiles, METAR, TAF.
+-- All main-block offsets are pixels from the ORB arc center (legacy
+-- theme.weather.main convention).
 panels.wxr = {
-  title  = "WXR",
-  x = 18, y = 24, width = 644, height = 390,
-  boxes = {
-    main     = { x = 12, y =  44, width = 620, height = 220 }, -- icon + arc + current
-    forecast = { x = 12, y = 274, width = 620, height = 104 }, -- 6-day tile strip
+  title = "WXR",
+  x = 0,
+  y = 90,
+  width = 680,
+  height = 680,
+  -- Main block: current icon + city + temp + humidity inside the arc.
+  -- Offsets from arc center — legacy theme.weather.main values.
+  main = {
+    icon_size   = 90,
+    icon_dx     = -65,
+    icon_dy     = -30,
+    city_dx     = 0,
+    city_dy     = -120,
+    city_pt     = 12,
+    temp_dx     = 15,
+    temp_dy     = -28,
+    temp_pt     = 44,
+    humidity_dx = 26,
+    humidity_dy = 0,
+    humidity_pt = 20,
   },
-  -- Aviation sub-blocks are drawn inline below the forecast strip
-  -- with their own wrap/pad config in the wxr view model.
+  -- Divider lines — legacy theme.weather.hline / vline (dy/dx from arc center)
+  hline = { length = 460, width = 0.5, dy = 58 },
+  vline = { length = 100, width = 0.5, dx = 0, dy = -80 },
+  -- Forecast tile strip — legacy theme.weather.forecast.
+  -- origin.y is relative to the weather block top (panel.y).
+  forecast = {
+    origin_y = 270, -- legacy origin.y 265 + dy 5
+    tiles    = 5,
+    tile_w   = 64,
+    gap      = 18,
+    date     = { pt = 14, dy = 0 },
+    icon     = { size = 34, dy = 46 },
+    temps    = { pt = 22, dy = 98 },
+  },
+  -- Aviation text blocks. y is relative to the weather block top;
+  -- wrap/pad values are the legacy theme.weather.metar/taf values.
   aviation = {
+    char_px = 8,  -- monospace advance at aviation font size
+    font_px = 16, -- aviation text size (px)
+    line_px = 22, -- line spacing
     metar = {
-      wrap_col  = 43,
-      pad_cols  = 15,
-      max_lines =  5,
+      y         = 455,
+      wrap_col  = 41,
+      max_lines = 5,
     },
     taf = {
-      wrap_col    = 60,
-      pad_cols    = 15,
-      max_lines   =  4,
-      indent_cols =  5,
+      y           = 585,
+      wrap_col    = 55,
+      max_lines   = 4,
+      indent_cols = 5,
     },
     advisories = {
-      enabled   = false, -- off by default; enable in site config if needed
+      enabled   = false, -- off in legacy theme as well
       wrap_col  = 42,
-      pad_cols  = 16,
-      max_lines =  3,
+      max_lines = 3,
     },
   },
 }
 
--- ORB — horizon arc with sun, moon, and visible planets
+-- ORB — horizon arc with sun, moon, and visible planets.
+-- Arc geometry is the legacy theme.weather.arc / center convention:
+-- center_mode auto_x, center y = panel.y + dy.
 panels.orb = {
-  title  = "ORB",
-  x = 18, y = 432, width = 644, height = 220,
-  -- Arc geometry relative to panel center.
-  -- center_mode = "auto_x" keeps the arc horizontally centered
-  -- on the panel regardless of width changes.
+  title = "ORB",
+  x = 0,
+  y = 90,
+  width = 680,
+  height = 400,
   arc = {
     center_mode   = "auto_x",
     center_offset = { x = 0, y = 0 },
     r             = 170,
-    start         = 180,
-    ["end"]       = 0,
-    dy            = 90,   -- vertical offset of arc center from panel top
+    start         = 180, -- West (left end)
+    ["end"]       = 0,   -- East (right end)
+    dy            = 204, -- arc center below panel top (legacy center.y)
   },
   horizon_labels = {
-    pt    = 12,
-    dy    = 24,   -- below arc
+    pt = 12,
+    dy = 24, -- below arc endpoints (legacy horizon_labels.dy)
   },
   sun_time_labels = {
-    pt    = 14,
-    dy    = 44,
-    sunrise_text = "SR",
-    sunset_text  = "SS",
+    pt           = 14,
+    dy           = 44,   -- below arc endpoints (legacy sun_time_labels.dy)
+    sunrise_text = "SR", -- final legacy theme values (older
+    sunset_text  = "SS", -- screenshots show "Sunrise"/"Sunset")
   },
 }
 
--- TME — local clock, UTC, date, month calendar
+-- TME — clock stack at chassis top.
 panels.tme = {
-  title  = "TME",
-  x = 18, y = 670, width = 644, height = 126,
+  title = "TME",
+  x = 0,
+  y = 0,
+  width = 680,
+  height = 770,
   boxes = {
-    clock    = { x = 12, y =  36, width = 300, height =  72 }, -- local + UTC clocks
-    date     = { x = 12, y =  36, width = 300, height =  24 }, -- date line (below clock)
-    calendar = { x = 328, y = 10, width = 304, height = 112 }, -- month grid alongside
+    -- Clock stack, centered on chassis width (legacy date-time widget):
+    -- local %H:%M:%S, UTC line, YYYY.MM.DD line.
+    clock = { x = 0, y = 0, width = 680, height = 90 },
   },
-  -- Calendar cell geometry (drawn by tme.lua via panels.tme.calendar.*)
+  clock = {
+    time_px = 30, -- legacy font_time 22pt ≈ 30px
+    gmt_px  = 14, -- legacy font_gmt 10pt ≈ 13.3px
+    date_px = 16, -- legacy font_date 12pt ≈ 16px
+    gap_px  = 6,  -- legacy voffset 4 between lines
+  },
+}
+
+----------------------------------------------------------------
+-- CALENDAR STANDALONE  (362 × 273)
+-- Legacy calendar.conky.conf ran as its own top_right window on
+-- head 1; kept standalone here for the same reason (its position
+-- is disjoint from the ambient chassis footprint).
+----------------------------------------------------------------
+
+-- CAL — month grid with nav-arrow title, weekday header, weekend
+-- gray, today in accent. Legacy theme.lua cal_* geometry.
+panels.cal = {
+  title = "CAL",
+  x = 0,
+  y = 0,
+  width = 362,
+  height = 273,
   calendar = {
-    week_start = "SU",
-    cell_w     = 40,
-    cell_h     = 28,
-    col_gap    =  2,
-    row_gap    =  3,
-    title_h    = 26,
-    title_gap  = 14,
+    week_start    = "SU",
+    cell_w        = 50,
+    cell_h        = 32,
+    col_gap       = 2,
+    row_gap       = 3,
+    border_lw     = 0, -- legacy cal_border_lw 0 (borderless; see calendar.png)
+    title_size    = 20,
+    weekday_size  = 14,
+    day_size      = 16,
+    title_h       = 30,
+    title_gap     = 18,
+    header_h      = 18,
+    grid_color    = { 0.35, 0.35, 0.35, 0.55 }, -- #5A5A5A @ 0.55
+    weekend_color = { 0.47, 0.47, 0.47, 1.00 }, -- #777777
   },
 }
 
@@ -125,65 +214,85 @@ panels.tme = {
 
 -- MSC — now-playing arc, album art, bars, title/artist/album
 panels.msc = {
-  title  = "MSC",
-  x = 18, y = 24, width = 544, height = 290,
+  title              = "MSC",
+  x                  = 18,
+  y                  = 24,
+  width              = 544,
+  height             = 290,
   hide_when_inactive = false,
   idle_hide_after_s  = 10,
   -- Arc geometry relative to panel center
-  arc = {
+  arc                = {
     center_mode = "auto_x",
-    dy          = 50,    -- smile arc offset (pushes arc downward)
+    dy          = 50, -- smile arc offset (pushes arc downward)
     r           = 140,
     start       = 200,
     ["end"]     = -20,
   },
-  bars = {
-    count      = 48,
-    width      =  6,
-    max_height = 68,
-    lift_px    = 48,
+  bars               = {
+    count        = 48,
+    width        = 6,
+    max_height   = 68,
+    lift_px      = 48,
     animate_idle = false,
   },
   -- Album art relative to arc anchor center
-  art = {
-    dx =  0,
+  art                = {
+    dx = 0,
     dy = -13,
     w  = 62,
     h  = 60,
   },
-  text = {
-    title  = { pt = 15, dy =  -6, field_w = 250 },
-    album  = { pt = 11, dy =  18, field_w = 280 },
+  text               = {
+    title  = { pt = 15, dy = -6, field_w = 250 },
+    album  = { pt = 11, dy = 18, field_w = 280 },
     artist = { pt = 14, dy = 128, field_w = 200 },
   },
 }
 
--- NOTES — sticky notes from flat text file
+-- NOTES — sticky notes from flat text file.
+-- Standalone top_right window (panels.notes + layout.notes), matching
+-- the legacy suite — it does not live in the media chassis.
+-- Grid metrics measured off the running legacy widget (DejaVu Sans
+-- Mono, Xft size=9 at this machine's DPI): 20.0 px line pitch over
+-- 85 lines, 10.0 px char advance (39-char fold width spans 390 px).
 panels.notes = {
-  title  = "NOTES",
-  x = 18, y = 332, width = 544, height = 580,
-  wrap_chars    = 72,   -- characters per line before wrapping
-  max_lines     = 38,   -- maximum lines to display
-  line_px       = 14,   -- vertical spacing per line
+  title      = "NOTES",
+  x          = 0,
+  y          = 0,
+  width      = 404,
+  height     = 1810,
+  wrap_chars = 39,         -- fold -s -w 39 (legacy notes_wrap)
+  max_lines  = 90,         -- sed -n 1,90p  (legacy notes_lines)
+  refresh_s  = 3,          -- legacy execi 3
+  grid       = {
+    x0             = 7,    -- left text margin in frame
+    first_baseline = 21,   -- baseline of line 1
+    line_px        = 20,   -- vertical advance per text line
+    font_px        = 16.6, -- mono font size (px); advance 10.0 px
+  },
 }
 
 -- LYRICS — current track lyrics
 panels.lyrics = {
-  title  = "LYRICS",
-  x = 18, y = 930, width = 544, height = 346,
+  title                 = "LYRICS",
+  x                     = 18,
+  y                     = 930,
+  width                 = 544,
+  height                = 346,
   hide_when_inactive    = true,
   idle_hide_after_s     = 10,
   normalize_blank_lines = true,
   max_blank_run         = 1,
   strip_lrc_timestamps  = true,
-  padding = { left = 10, top = 10, right = 10, bottom = 10 },
-  header = {
+  padding               = { left = 10, top = 10, right = 10, bottom = 10 },
+  header                = {
     enabled = true,
     format  = "{artist} — {title}",
     pt      = 14,
     bold    = true,
   },
-  body = {
+  body                  = {
     pt      = 12,
     line_px = 15,
   },
@@ -191,96 +300,119 @@ panels.lyrics = {
 
 ----------------------------------------------------------------
 -- PFSENSE STANDALONE  (660 × 520)
--- VLAN flow arc visualization only.
--- pfBlockerNG / Pi-hole / AP / totals are in the core sitrep utility.
+-- VLAN traffic flow arc visualization only (conversion guide §1.4).
+-- CPU/MEM meters, gateway label, nameplate, totals, pfBlockerNG /
+-- Pi-hole / AP status are all retired to the core sitrep utility.
+-- CAM (igc1.50) is new vs the legacy 5-arc widget — the VLAN was
+-- added after the legacy suite froze; the core provider serves it.
 ----------------------------------------------------------------
 panels.pfsense = {
-  title   = "FLOW",
-  x = 18, y = 24, width = 624, height = 492,
+  -- Box equals layout.pfsense's frame at (0,0) — the standalone-widget
+  -- pattern (same as panels.cal / notes). The dome self-centers: arc
+  -- center x is width/2, so it stays centered at any frame width.
+  -- Headroom is implicit: side = width/2 − arc.r, top = arc.dy − arc.r.
+  -- Keep both ≥ 14px or the markers (12px radius, riding ON the arc
+  -- line) clip at the window edge at idle/full-scale positions.
+  x = 0,
+  y = 0,
+  width = 840,
+  height = 500,
 
-  -- Arc geometry (concentric arcs for WAN / HOME / IOT / GUEST / INFRA)
+  -- Arc geometry (concentric dome arcs, outermost = WAN).
+  -- Note the legacy theme said r=380, but its 640px window clamped the
+  -- rendered radius to ~312 — the theme value never drew; r here is
+  -- sized to taste with the frame sized around it.
   arc = {
-    -- Center is auto-computed from frame width; dy positions it vertically.
-    center_mode   = "auto_x",
-    dy            = 300,        -- pixels from panel top to arc center
-    r             = 300,        -- outermost arc radius (WAN)
-    start         = 180,
-    ["end"]       = 0,
-    width         = 2,          -- base arc stroke
-    delta_r       = 36,         -- radial gap between concentric arcs
-    anchor_strength = 0.5,      -- 0=concentric, 1=apex-anchored
+    dy              = 424, -- arc center below panel top (= r + 24px apex headroom)
+    r               = 400, -- outermost arc radius (WAN); keep ≤ width/2 − 14
+    width           = 2,   -- base arc stroke
+    delta_r         = 36,  -- radial gap between concentric arcs
+    anchor_strength = 0.5, -- 0=concentric, 1=apex-anchored (legacy 0.5)
   },
 
   -- Interface order (outermost to innermost)
-  iface_order = { "WAN", "HOME", "IOT", "GUEST", "INFRA" },
+  iface_order = { "WAN", "HOME", "IOT", "GUEST", "INFRA", "CAM" },
 
-  -- Arc end labels
+  -- DN/UP labels at the outermost arc's base endpoints
   labels = {
     size     = 12,
-    dx_left  =  -8,
-    dy_left  =  30,
-    dx_right =  -8,
-    dy_right =  30,
+    dx_left  = -8,
+    dy_left  = 30,
+    dx_right = -8,
+    dy_right = 30,
     text_in  = "DN",
     text_out = "UP",
   },
 
-  -- Arc name labels (dash leader + name at left endpoints)
+  -- Arc name labels: dash leader + name, drawn inward from each arc's
+  -- left endpoint ("-----WAN"). dash_count grows inward so the names
+  -- roughly align; CAM extends the legacy 14..34 progression.
   arc_names = {
     enabled   = true,
     dash_char = "-",
-    dash_gap  =  0,
-    dx        =  5,
-    dy        =  5,
-    size      = 14,
+    dx        = 5,
+    dy        = 5,
+    size      = 16, -- legacy arc_names size
     per_arc   = {
-      WAN   = { dash_count = 14, text = "WAN"   },
-      HOME  = { dash_count = 18, text = "HOME"  },
-      IOT   = { dash_count = 26, text = "IoT"   },
+      WAN   = { dash_count = 14, text = "WAN" },
+      HOME  = { dash_count = 18, text = "HOME" },
+      IOT   = { dash_count = 26, text = "IoT" },
       GUEST = { dash_count = 28, text = "GUEST" },
       INFRA = { dash_count = 34, text = "INFRA" },
+      CAM   = { dash_count = 36, text = "CAM" }, -- capped so the name clears CAM's resting OUT ring
     },
   },
 
-  -- Top-of-arc static label
+  -- Static scale label under the arc apex
   top_label = {
     enabled = true,
     text    = "100%",
-    dy      = 80,      -- below arc apex (px)
+    -- Legacy dy 94 assumed 5 arcs; the 6th (CAM) arc's apex sits lower,
+    -- so 116 keeps the same ~22px clearance below the innermost apex.
+    dy      = 116,
     size    = 12,
   },
 
-  -- Center meters (CPU% and MEM% vertical bars under the apex)
-  center_meters = {
-    enabled  = true,
-    dx       =   0,
-    dy       = -200,   -- upward from arc center
-    height   = 100,
-    width    =  50,
-    gap      =  40,
-    label_size = 14,
-    cpu_label  = "CPU%",
-    mem_label  = "MEM%",
+  -- Marker shape shared across arcs (per-VLAN color/radius in
+  -- theme.pf_markers; IN is filled, OUT is a hollow ring)
+  marker = { out_stroke = 3 },
+
+  -- Baseline under the dome (legacy pf.hline) — dropped by choice:
+  -- with the status text that hung off it retired to sitrep, the
+  -- bare line wasn't earning its place. Flip enabled to bring it back.
+  baseline = {
+    enabled = false,
+    dy      = 50,  -- below arc center (legacy pf.hline.dy)
+    width   = 1,
+    length  = 800, -- full panel width, flush with the dome ends
   },
 
-  -- Nameplate (pfSense model/version, static text)
-  nameplate = {
-    enabled = true,
-    text    = "V1211",
-    dy      =  15,
-    size    =  13,
+  -- Rate → arc-fraction response (ported legacy scale block: sqrt
+  -- curve, per-direction link caps in Mbps, no idle floors).
+  -- CAM caps are new: 100/100 matching the other internal VLANs.
+  scale = {
+    mode = "sqrt",
+    sqrt = { gamma = 0.35 },
+    floors_mbps = {},
+  },
+  link_mbps_in = {
+    WAN   = 600,
+    HOME  = 100,
+    IOT   = 100,
+    GUEST = 50,
+    INFRA = 100,
+    CAM   = 100,
+  },
+  link_mbps_out = {
+    WAN   = 50,
+    HOME  = 100,
+    IOT   = 100,
+    GUEST = 100,
+    INFRA = 100,
+    CAM   = 100,
   },
 
-  -- Gateway status (ONLINE / OFFLINE)
-  gateway_label = {
-    enabled   = true,
-    size      = 15,
-    dy        = 12,   -- above baseline
-    text_ok   = "ONLINE",
-    text_bad  = "OFFLINE",
-  },
-
-  -- Smoothing (EMA) for displayed rates
+  -- Smoothing (EMA) applied to the scaled fraction
   smoothing = { alpha = 0.35 },
 }
 

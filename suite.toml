@@ -42,7 +42,17 @@ description = "Weather, astronomy, and time panels (WXR + ORB + TME)"
 [[instances.chassis]]
 id          = "media"
 conf        = "widgets/clean-media.conky.conf"
-description = "Music, notes, and lyrics panels (MSC + NOTES + LYRICS)"
+description = "Music and lyrics panels (MSC + LYRICS)"
+
+[[instances.standalone]]
+id          = "notes"
+conf        = "widgets/clean-notes.conky.conf"
+description = "Sticky notes text (NOTES). Standalone top_right window on the secondary monitor, matching the legacy notes widget."
+
+[[instances.standalone]]
+id          = "calendar"
+conf        = "widgets/clean-calendar.conky.conf"
+description = "Month calendar (CAL). Standalone top_right window on the secondary monitor, matching the legacy calendar widget."
 
 [[instances.standalone]]
 id          = "pfsense"
@@ -56,13 +66,12 @@ optional    = true
 # pfsense feeds the VLAN flow standalone panel.
 # network and connectivity feed the NET chassis panel.
 # astro and aviation feed the ambient chassis ORB and WXR panels.
-# air is new to this suite (not present in the legacy clean-suite).
+# air (AQI) is reserved for a future ENV sub-panel; add it back when implemented.
 domains = [
   "system",
   "weather",
   "astro",
   "aviation",
-  "air",
   "network",
   "connectivity",
   "pfsense",
