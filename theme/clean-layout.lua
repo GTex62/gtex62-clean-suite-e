@@ -90,6 +90,14 @@ layout.calendar = {
 -- 408 (top_middle window_top = gap_y − 5), which gives lyrics its
 -- measured y and puts the msc arc center at abs y 938 via
 -- panels.msc.y + arc.dy.
+-- Frame WIDTH is free to change: panels.msc/panels.lyrics derive
+-- their x-geometry from it (width/2-anchored), so resizing only
+-- changes edge headroom. 2460 sizes the right edge (head-rel
+-- (3840+width+10)/2 = 3155) to give lyric lines the same ~785 px
+-- clip capacity the legacy 795-wide window had — the earlier 1700
+-- clipped wide lines at ~414 px. Left edge lands at 685, clear of
+-- the monitor chassis (ends 588); right edge clear of notes/calendar
+-- (start ≥ 3396).
 -- The window rectangle overlaps the ambient and pfSense windows, but
 -- the drawn content boxes are disjoint (msc content starts below the
 -- ambient chassis bottom; lyrics sits right of the pfSense dome) —
@@ -98,7 +106,7 @@ layout.calendar = {
 -- the legacy suite — it does not live in this chassis.
 ----------------------------------------------------------------
 layout.media = {
-  frame         = { x = 0, y = 0, width = 1700, height = 1340 },
+  frame         = { x = 0, y = 0, width = 2460, height = 1340 },
   margin        = { top = 0, left = 0, right = 0, gap = 0 },
   xinerama_head = 1, -- secondary monitor (legacy monitor_head = 1)
   alignment     = "top_middle",

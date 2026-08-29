@@ -6,6 +6,15 @@
 -- Box coordinates are relative to their parent panel origin.
 -- "title" is the label drawn in the panel header row.
 
+local HOME      = os.getenv("HOME") or ""
+local SUITE_DIR = os.getenv("CONKY_SUITE_DIR")
+    or (HOME .. "/.config/conky/gtex62-clean-suite-e")
+
+-- Chassis frame geometry — the media panels derive their x-geometry
+-- from layout.media.frame.width (see the MEDIA CHASSIS section), so
+-- resizing that frame never moves the arc axis or the lyrics column.
+local layout    = dofile(SUITE_DIR .. "/theme/clean-layout.lua")
+
 local panels = {}
 
 ----------------------------------------------------------------
@@ -209,10 +218,20 @@ panels.cal = {
 }
 
 ----------------------------------------------------------------
--- MEDIA CHASSIS  (1700 × 1340)
+-- MEDIA CHASSIS  (layout.media.frame, top_middle)
 -- One top_middle window covering both legacy windows' measured
 -- rendered footprints — see layout.media for the window math.
+--
+-- Width-independent anchoring: with a top_middle window, widening
+-- the frame moves window_left by −ΔW/2 while the frame center moves
+-- +ΔW/2 — so anything positioned relative to MEDIA_W/2 stays put on
+-- screen no matter the frame width. panels.msc is full-width (arc
+-- axis = width/2) and panels.lyrics.x is anchored to the axis, so
+-- resizing layout.media.frame only changes edge headroom (e.g. more
+-- right-edge room before the window clips wide lyric lines).
 ----------------------------------------------------------------
+
+local MEDIA_W = layout.media.frame.width
 
 -- MSC — now-playing "smile" arc, album art, markers, title/album/artist.
 --
@@ -232,9 +251,11 @@ panels.cal = {
 panels.msc = {
   title              = "MSC",
   x                  = 0,
-  y                  = 326, -- arc center abs y 938 = window_top 408 + y + arc.dy
-  width              = 1700,
-  height             = 400, -- same arc band height as panels.orb
+  y                  = 326,     -- arc center abs y 938 = window_top 408 + y + arc.dy
+  width              = MEDIA_W, -- full frame width: arc axis = width/2 lands at abs 1915
+                                -- (head-rel) for ANY frame width — same rendered x as
+                                -- the ambient arc axis (panel-width/2 convention)
+  height             = 400,     -- same arc band height as panels.orb
   hide_when_inactive = false, -- legacy: music widget always visible
   idle_hide_after_s  = 10,
   inactive_message   = "Play music, feel better",
@@ -313,14 +334,16 @@ panels.notes = {
 -- legacy music-lyrics window (2026-08-28: window at physical (6201,413)
 -- sized 795×1324, text left 6211, header baseline 441 — the conf's
 -- gap −600,300 / 560×940 were NOT the rendered truth, same pitfall as
--- calendar/notes/monitor). In-chassis: text left = window_left(4905)
--- + x + padding.left; header baseline = window_top(408) + y +
--- padding.top + header.pt.
+-- calendar/notes/monitor). x is anchored to the arc axis (MEDIA_W/2 +
+-- 446; 446 = measured text-left 2371 head-rel − axis 1915 − pad 10),
+-- so the column stays put at any frame width. Long lines clip at the
+-- window's right edge — frame width is sized so that capacity matches
+-- the legacy window's (~785 px from text left; see layout.media).
 panels.lyrics = {
   title              = "LYRICS",
-  x                  = 1296,
+  x                  = MEDIA_W / 2 + 446,
   y                  = 5,
-  width              = 400,
+  width              = 780,  -- informational: the legacy window's usable line width
   height             = 1324, -- legacy rendered window height; sets max body lines
   hide_when_inactive = true, -- legacy theme.lyrics (10 s linger after stop)
   idle_hide_after_s  = 10,
