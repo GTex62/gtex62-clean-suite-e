@@ -9,9 +9,13 @@
 --   shared/system/local/storage.json     filesystem rows (/ROOT, /WD, ...)
 -- No Conky built-ins, no direct nvidia-smi/df/proc probing — core owns the data.
 --
--- NET half: reads the core network/connectivity caches —
---   shared/network/local/current.json        interface, WAN/LAN IPs, DNS, VLANs
---   shared/connectivity/default/current.json ping probes (1.1.1.1 / 8.8.8.8)
+-- NET half: reads the core network/net caches —
+--   shared/network/local/current.json interface, WAN/LAN IPs, DNS, VLANs
+--   shared/net/local/state.vars       ping probes (1.1.1.1 / 8.8.8.8) — net's
+--     own independent ping (CF_1111_MS / GOOGLE_8888_MS), not connectivity's;
+--     matches gtex62-osa's pattern. See docs/net-provider.md: net is the
+--     "display-ready projection layer," refreshed at 1s: connectivity's own
+--     ping output has no consumer anywhere in the codebase (confirmed).
 -- Fast lane (guide §4.2 — live telemetry read directly at draw time):
 --   LAN link state from /sys/class/net/<iface>/operstate
 --   throughput rates + graph history from /sys/class/net/<iface>/statistics
@@ -26,8 +30,8 @@ local CACHE_ROOT = os.getenv("GTEX62_CACHE_DIR") or os.getenv("GTEX62_CONKY_CACH
 local SYS_PROFILE = os.getenv("GTEX62_SYSTEM_PROFILE") or "local"
 local SYS_DIR   = CACHE_ROOT .. "/shared/system/" .. SYS_PROFILE .. "/"
 local NET_JSON  = CACHE_ROOT .. "/shared/network/local/current.json"
-local CONN_JSON = CACHE_ROOT .. "/shared/connectivity/"
-  .. (os.getenv("GTEX62_CONNECTIVITY_PROFILE") or "default") .. "/current.json"
+local NET_PROFILE = os.getenv("GTEX62_NET_PROFILE") or "local"
+local NET_STATE_VARS = CACHE_ROOT .. "/shared/net/" .. NET_PROFILE .. "/state.vars"
 
 local M = {}
 
@@ -279,10 +283,12 @@ local NET_JQ = [[
   (.vlan_hosts[]? | "VLAN=\(.label)|\(.host)|\(.ms // "")|\(if .reachable then 1 else 0 end)")
 ]]
 
-local CONN_JQ = [[
-  .ping | to_entries[]? |
-  "PING=\(.value.host)|\(.value.ms // "")|\(if .value.reachable then 1 else 0 end)"
-]]
+-- net's own independent ping (state.vars key=value, no jq needed) — not
+-- connectivity's .ping{} object, which has no consumer anywhere in the suite.
+local NET_PING_HOST_KEY = {
+  ["1.1.1.1"] = "CF_1111_MS",
+  ["8.8.8.8"] = "GOOGLE_8888_MS",
+}
 
 local function refresh_net()
   local tick = os.time()
@@ -310,14 +316,19 @@ local function refresh_net()
     end
   end
 
-  local pout = command_output(string.format("jq -r %q %q 2>/dev/null", CONN_JQ, CONN_JSON))
-  if pout then
-    for line in pout:gmatch("[^\r\n]+") do
-      local host, ms, reach = line:match("^PING=([^|]*)|([^|]*)|([^|]*)$")
-      if host then
-        NET.pings[host] = { ms = tonumber(ms), reachable = (reach == "1") }
-      end
+  local state_kv = {}
+  local sf = io.open(NET_STATE_VARS, "r")
+  if sf then
+    local contents = sf:read("*a") or ""
+    sf:close()
+    for line in contents:gmatch("[^\r\n]+") do
+      local key, value = line:match("^([A-Za-z0-9_]+)=(.*)$")
+      if key then state_kv[key] = value end
     end
+  end
+  for host, state_key in pairs(NET_PING_HOST_KEY) do
+    local ms = tonumber(state_kv[state_key])
+    NET.pings[host] = { ms = ms, reachable = ms ~= nil }
   end
 end
 
