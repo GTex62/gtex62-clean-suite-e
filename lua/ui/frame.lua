@@ -133,7 +133,7 @@ local function draw_sys_content(cr, theme, panels, data)
   local sl_fill = slash.fill_color or colors.accent
   local sl_mt   = slash.empty_color or colors.dim
   local sl_ch   = slash.char or "/"
-  local sep_str = string.rep((theme.sep and theme.sep.char) or "-", sysp.sep_count or 50)
+  local sep_str = string.rep((theme.sep and theme.sep.char) or "-", (theme.sep and theme.sep.count) or 50)
 
   local function col(n) return cur.x0 + n * cur.char_px end
   local function text(x, s, c) draw_text_left(cr, x, cur.y, s, mono, px, c) end
@@ -245,10 +245,13 @@ local function draw_net_content(cr, theme, panels, data, cur)
   local mono            = theme.fonts.mono or "DejaVu Sans Mono"
   local px              = cur.font_px
   local ink, fg, accent = colors.ink, colors.fg, colors.accent
-  local sep_str         = string.rep((theme.sep and theme.sep.char) or "-",
-    (panels.sys and panels.sys.sep_count) or 50)
+  local sep_count       = (theme.sep and theme.sep.count) or 50
+  local sep_str         = string.rep((theme.sep and theme.sep.char) or "-", sep_count)
+  -- Right edge of the header's "Updated:" pair matches the separator
+  -- line's own right edge, which is what the frame width is actually
+  -- sized around (was + 4 chars past it, clipping past the 568px frame).
   local right_x         = (panels.monitor_grid and panels.monitor_grid.x0 or 7)
-      + ((panels.sys and panels.sys.sep_count or 50) + 4) * cur.char_px
+      + sep_count * cur.char_px
 
   local function col(n) return cur.x0 + n * cur.char_px end
   local function text(x, s, c) draw_text_left(cr, x, cur.y, s, mono, px, c) end

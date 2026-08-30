@@ -3,44 +3,44 @@
 -- fonts, stroke widths, frame effects, status colors, and fixed domain
 -- constants (astronomy markers, planet colors) that do not vary by palette.
 
-local HOME         = os.getenv("HOME") or ""
-local SUITE_DIR    = os.getenv("CONKY_SUITE_DIR")
+local HOME       = os.getenv("HOME") or ""
+local SUITE_DIR  = os.getenv("CONKY_SUITE_DIR")
     or (HOME .. "/.config/conky/gtex62-clean-suite-e")
-local PAL_ID       = os.getenv("GTEX62_PALETTE") or "default"
+local PAL_ID     = os.getenv("GTEX62_PALETTE") or "default"
 
-local catalog      = dofile(SUITE_DIR .. "/theme/clean-palettes.lua")
-local palette      = catalog[PAL_ID] or catalog["default"]
+local catalog    = dofile(SUITE_DIR .. "/theme/clean-palettes.lua")
+local palette    = catalog[PAL_ID] or catalog["default"]
 
-local theme        = {}
+local theme      = {}
 
 -- Active palette (all role tables available as theme.palette.*)
-theme.palette      = palette
+theme.palette    = palette
 
 -- Convenience shortcuts
-theme.colors       = {
+theme.colors     = {
   bg     = palette.bg,
   fg     = palette.fg,
   ink    = palette.ink,
   dim    = palette.dim,
   accent = palette.accent,
 }
-theme.status       = {
+theme.status     = {
   ok   = palette.ok,
   warn = palette.warn,
   err  = palette.err,
 }
-theme.net          = {
+theme.net        = {
   up   = palette.net_up,
   down = palette.net_down,
 }
-theme.pf           = {
+theme.pf         = {
   arc_base = palette.pf_arc_base,
 }
 
 ----------------------------------------------------------------
 -- Typography
 ----------------------------------------------------------------
-theme.fonts        = {
+theme.fonts      = {
   -- UI chrome
   title = "Inter Bold",
   label = "Inter",
@@ -52,7 +52,7 @@ theme.fonts        = {
   -- Clock (large)
   time  = "DejaVu Sans Mono",
 }
-theme.sizes        = {
+theme.sizes      = {
   title = 11,
   label = 10,
   data  = 10,
@@ -65,20 +65,20 @@ theme.sizes        = {
 ----------------------------------------------------------------
 -- Strokes and geometry constants
 ----------------------------------------------------------------
-theme.strokes      = {
+theme.strokes    = {
   line  = 0.5, -- separator / hline
   frame = 1.5, -- panel border
   meter = 8.0, -- bar/meter thickness
   arc   = 2.0, -- thin arc outlines
 }
-theme.alpha        = {
+theme.alpha      = {
   panel_bg  = 0.72,
   separator = 0.35,
   inactive  = 0.45,
 }
 
 -- Slash-bar style (SYS panel CPU/RAM/GPU)
-theme.slash        = {
+theme.slash      = {
   count       = 20,
   fill_color  = palette.accent,
   empty_color = palette.slash_empty,
@@ -86,9 +86,9 @@ theme.slash        = {
 }
 
 -- Separator line style
-theme.sep          = {
+theme.sep        = {
   char  = "-",
-  count = 50,
+  count = 46,
 }
 
 ----------------------------------------------------------------
@@ -96,7 +96,7 @@ theme.sep          = {
 -- Sun and moon are physical objects; their marker colors are
 -- conventional and do not change with the color scheme.
 ----------------------------------------------------------------
-theme.astro        = {
+theme.astro      = {
   sun       = {
     diameter = 36,
     stroke   = 10.0,
@@ -137,13 +137,13 @@ theme.astro        = {
 -- and its already-played segment uses the horizon arc's night-side
 -- gray (legacy music.arc.progress_color 242424 = gray14 = arc_night).
 ----------------------------------------------------------------
-theme.msc          = {
+theme.msc        = {
   volume_color = { 1.00, 0.00, 0.00, 1.00 },
   muted_alpha  = 0.35, -- legacy muted_mode "dim"
   trail_color  = theme.astro.arc_night,
 }
 
-theme.pf_markers   = {
+theme.pf_markers = {
   WAN   = { r = 10, color = { 1.00, 0.00, 0.00, 1.00 } }, -- red (most prominent)
   HOME  = { r = 10, color = { 0.60, 0.60, 0.60, 1.00 } }, -- medium gray
   IOT   = { r = 10, color = { 0.40, 0.40, 0.40, 1.00 } }, -- dark gray

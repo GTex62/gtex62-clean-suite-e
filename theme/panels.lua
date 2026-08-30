@@ -6,16 +6,16 @@
 -- Box coordinates are relative to their parent panel origin.
 -- "title" is the label drawn in the panel header row.
 
-local HOME      = os.getenv("HOME") or ""
-local SUITE_DIR = os.getenv("CONKY_SUITE_DIR")
+local HOME          = os.getenv("HOME") or ""
+local SUITE_DIR     = os.getenv("CONKY_SUITE_DIR")
     or (HOME .. "/.config/conky/gtex62-clean-suite-e")
 
 -- Chassis frame geometry — the media panels derive their x-geometry
 -- from layout.media.frame.width (see the MEDIA CHASSIS section), so
 -- resizing that frame never moves the arc axis or the lyrics column.
-local layout    = dofile(SUITE_DIR .. "/theme/clean-layout.lua")
+local layout        = dofile(SUITE_DIR .. "/theme/clean-layout.lua")
 
-local panels = {}
+local panels        = {}
 
 ----------------------------------------------------------------
 -- MONITOR CHASSIS  (598 × 1880)
@@ -38,24 +38,26 @@ panels.monitor_grid = {
 
 -- SYS — OS/host header, disk table, CPU/RAM/GPU slash bars,
 -- top-5 process rows, hardware id footer
-panels.sys = {
+panels.sys          = {
   title        = "SYS",
   pipe_x       = 368, -- "|" column for process/GPU rows (legacy goto 260)
   name_indent  = 4,   -- chars of indent before process names
   name_max     = 26,  -- process name trim (legacy topname 26)
   disk_val_col = 11,  -- char column where disk table values start
-  sep_count    = 50,  -- separator dash count (theme.sep)
+  -- Separator dash count lives in theme.sep.count (suite-wide style
+  -- dial, same precedent as theme.slash.count) — was duplicated here
+  -- as a dead constant frame.lua never read from theme.
 }
 
 -- NET — interface/WAN/LAN/DNS rows, pings, VLAN gateway list,
 -- live throughput graphs
-panels.net = {
+panels.net          = {
   title       = "NET",
   value_x     = 262,                                  -- value column (legacy goto 185)
   vlan_gw_col = 14,                                   -- char col of "Gateway:" (legacy "%-13s " name field)
   vlan_ip_col = 23,                                   -- char col of the gateway IP
   vlan_ms_col = 36,                                   -- char col of the "(N ms)" rtt
-  graph       = { x = 5, width = 531, height = 112 }, -- legacy 80px at DPI scale
+  graph       = { x = 5, width = 500, height = 112 }, -- legacy 80px at DPI scale
 }
 
 ----------------------------------------------------------------
@@ -74,7 +76,7 @@ panels.net = {
 -- WXR — current conditions in arc interior, forecast tiles, METAR, TAF.
 -- All main-block offsets are pixels from the ORB arc center (legacy
 -- theme.weather.main convention).
-panels.wxr = {
+panels.wxr          = {
   title = "WXR",
   x = 0,
   y = 90,
@@ -138,7 +140,7 @@ panels.wxr = {
 -- ORB — horizon arc with sun, moon, and visible planets.
 -- Arc geometry is the legacy theme.weather.arc / center convention:
 -- center_mode auto_x, center y = panel.y + dy.
-panels.orb = {
+panels.orb          = {
   title = "ORB",
   x = 0,
   y = 90,
@@ -165,7 +167,7 @@ panels.orb = {
 }
 
 -- TME — clock stack at chassis top.
-panels.tme = {
+panels.tme          = {
   title = "TME",
   x = 0,
   y = 0,
@@ -193,7 +195,7 @@ panels.tme = {
 
 -- CAL — month grid with nav-arrow title, weekday header, weekend
 -- gray, today in accent. Legacy theme.lua cal_* geometry.
-panels.cal = {
+panels.cal          = {
   title = "CAL",
   x = 0,
   y = 0,
@@ -231,7 +233,7 @@ panels.cal = {
 -- right-edge room before the window clips wide lyric lines).
 ----------------------------------------------------------------
 
-local MEDIA_W = layout.media.frame.width
+local MEDIA_W       = layout.media.frame.width
 
 -- MSC — now-playing "smile" arc, album art, markers, title/album/artist.
 --
@@ -248,14 +250,14 @@ local MEDIA_W = layout.media.frame.width
 -- the chassis top_middle and this panel full-width, the music arc axis
 -- renders at the same x as the ambient arc axis (both use the shared
 -- panel-width/2 convention; measured 5755 physical for both).
-panels.msc = {
+panels.msc          = {
   title              = "MSC",
   x                  = 0,
   y                  = 326,     -- arc center abs y 938 = window_top 408 + y + arc.dy
   width              = MEDIA_W, -- full frame width: arc axis = width/2 lands at abs 1915
-                                -- (head-rel) for ANY frame width — same rendered x as
-                                -- the ambient arc axis (panel-width/2 convention)
-  height             = 400,     -- same arc band height as panels.orb
+  -- (head-rel) for ANY frame width — same rendered x as
+  -- the ambient arc axis (panel-width/2 convention)
+  height             = 400,   -- same arc band height as panels.orb
   hide_when_inactive = false, -- legacy: music widget always visible
   idle_hide_after_s  = 10,
   inactive_message   = "Play music, feel better",
@@ -267,8 +269,8 @@ panels.msc = {
     dy      = panels.orb.arc.dy,     -- center-y below panel top (legacy weather.center.y)
   },
   baseline           = {
-    dy     = -45,                     -- HR line above arc center (legacy music.baseline.dy)
-    length = panels.wxr.hline.length, -- 460 — mirrors the weather hline, by reference
+    dy     = -45,                             -- HR line above arc center (legacy music.baseline.dy)
+    length = panels.wxr.hline.length,         -- 460 — mirrors the weather hline, by reference
   },
   time_labels        = { pt = 18, dy = -18 }, -- baselines above arc center (legacy music.time_labels)
   marker             = { d = 20 },            -- progress dot (palette accent)
@@ -308,7 +310,7 @@ panels.msc = {
 -- Grid metrics measured off the running legacy widget (DejaVu Sans
 -- Mono, Xft size=9 at this machine's DPI): 20.0 px line pitch over
 -- 85 lines, 10.0 px char advance (39-char fold width spans 390 px).
-panels.notes = {
+panels.notes        = {
   title      = "NOTES",
   x          = 0,
   y          = 0,
@@ -339,7 +341,7 @@ panels.notes = {
 -- so the column stays put at any frame width. Long lines clip at the
 -- window's right edge — frame width is sized so that capacity matches
 -- the legacy window's (~785 px from text left; see layout.media).
-panels.lyrics = {
+panels.lyrics       = {
   title              = "LYRICS",
   x                  = MEDIA_W / 2 + 446,
   y                  = 5,
@@ -378,7 +380,7 @@ panels.lyrics = {
 -- CAM (igc1.50) is new vs the legacy 5-arc widget — the VLAN was
 -- added after the legacy suite froze; the core provider serves it.
 ----------------------------------------------------------------
-panels.pfsense = {
+panels.pfsense      = {
   -- Box equals layout.pfsense's frame at (0,0) — the standalone-widget
   -- pattern (same as panels.cal / notes). The dome self-centers: arc
   -- center x is width/2, so it stays centered at any frame width.
