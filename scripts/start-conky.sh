@@ -61,6 +61,25 @@ for chassis in monitor ambient media notes calendar pfsense; do
   wait_pid_exit "$PIDS_DIR/clean-e-${chassis}.pid"
 done
 
+# -- Enforce suite exclusivity ---------------------------------------------
+# Only one main suite may run at a time; SitRep is the sole exception (it's
+# allowed to run alongside any main suite), so it's skipped here. Match on
+# each other suite's widgets/ path — the same scoped convention this
+# script and gtex62-osa already use for their own self-stop — rather than
+# a blanket `pkill -x conky`, so SitRep is never touched. Killing a
+# suite's conky window is enough to bring the whole suite down: a
+# core-launcher-managed suite (osa) blocks on `wait "$CONKY_PID"` and
+# exits once it's gone, and its refresh loops self-terminate on their next
+# `kill -0 "$CONKY_PID"` check.
+CONKY_ROOT="$(dirname "$SUITE_DIR")"
+for other_dir in "$CONKY_ROOT"/*/; do
+  other_dir="${other_dir%/}"
+  [[ "$other_dir" == "$SUITE_DIR" ]] && continue
+  [[ "$(basename "$other_dir")" == "gtex62-sitrep" ]] && continue
+  [[ -d "$other_dir/widgets" ]] || continue
+  pkill -f "$other_dir/widgets/" 2>/dev/null || true
+done
+
 # -- Prefer core launcher -------------------------------------------------
 if [[ -x "$CORE_LAUNCHER" ]]; then
   if command -v setsid >/dev/null 2>&1; then
