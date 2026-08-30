@@ -84,10 +84,10 @@ panels.net          = {
   -- as legacy's own fixed 750px sys-info/net-sys offset — just
   -- measured against this port's grid instead of legacy's.
   y0          = 1013,
-  value_x     = 262,                                  -- value column (legacy goto 185)
-  vlan_gw_col = 14,                                   -- char col of "Gateway:" (legacy "%-13s " name field)
-  vlan_ip_col = 23,                                   -- char col of the gateway IP
-  vlan_ms_col = 36,                                   -- char col of the "(N ms)" rtt
+  value_x     = 262, -- value column (legacy goto 185)
+  vlan_gw_col = 14,  -- char col of "Gateway:" (legacy "%-13s " name field)
+  vlan_ip_col = 23,  -- char col of the gateway IP
+  vlan_ms_col = 36,  -- char col of the "(N ms)" rtt
   -- graph.width (500) is a literal, NOT derived from
   -- layout.monitor.frame.width (568) — F1 decision (2026-08-29), carried
   -- forward from the prior session's tuning pass (531 -> 500, commit
@@ -136,7 +136,7 @@ panels.net          = {
 -- other (just moved together), then reverted.
 ----------------------------------------------------------------
 
-local AMBIENT_W = layout.ambient.frame.width
+local AMBIENT_W     = layout.ambient.frame.width
 
 -- WXR — current conditions in arc interior, forecast tiles, METAR, TAF.
 -- All main-block offsets are pixels from the ORB arc center (legacy
@@ -172,7 +172,7 @@ panels.wxr          = {
     origin_y = 270, -- legacy origin.y 265 + dy 5
     tiles    = 5,
     tile_w   = 64,
-    gap      = 18,
+    gap      = 22,
     date     = { pt = 14, dy = 0 },
     icon     = { size = 34, dy = 46 },
     temps    = { pt = 22, dy = 98 },
@@ -180,12 +180,16 @@ panels.wxr          = {
   -- Aviation text blocks. y is relative to the weather block top;
   -- wrap/pad values are the legacy theme.weather.metar/taf values.
   aviation = {
-    char_px = 8,  -- monospace advance at aviation font size
     font_px = 16, -- aviation text size (px)
     line_px = 22, -- line spacing
+    -- Shared x nudge for metar/taf (and advisories, once drawn). Base x is
+    -- anchored to hline's left edge (cx - hline.length/2), independent of
+    -- wrap_col, so re-wrapping the text never moves the block; dx is a pure
+    -- fine-tune from that anchor. 0 lines up exactly with hline as-is.
+    dx = 0,
     metar = {
       y         = 455,
-      wrap_col  = 41,
+      wrap_col  = 46,
       max_lines = 5,
     },
     taf = {
@@ -258,7 +262,7 @@ panels.tme          = {
 -- is disjoint from the ambient chassis footprint).
 ----------------------------------------------------------------
 
-local CAL_FRAME = layout.calendar.frame
+local CAL_FRAME     = layout.calendar.frame
 
 -- CAL — month grid with nav-arrow title, weekday header, weekend
 -- gray, today in accent. Legacy theme.lua cal_* geometry. Box equals
@@ -271,17 +275,17 @@ panels.cal          = {
   width = CAL_FRAME.width,
   height = CAL_FRAME.height,
   calendar = {
-    cell_w        = 50,
-    cell_h        = 32,
-    col_gap       = 2,
-    row_gap       = 3,
-    border_lw     = 0, -- legacy cal_border_lw 0 (borderless; see calendar.png)
-    title_size    = 20,
-    weekday_size  = 14,
-    day_size      = 16,
-    title_h       = 30,
-    title_gap     = 18,
-    header_h      = 18,
+    cell_w       = 50,
+    cell_h       = 32,
+    col_gap      = 2,
+    row_gap      = 3,
+    border_lw    = 0, -- legacy cal_border_lw 0 (borderless; see calendar.png)
+    title_size   = 20,
+    weekday_size = 14,
+    day_size     = 16,
+    title_h      = 30,
+    title_gap    = 18,
+    header_h     = 18,
     -- Grid line / weekend-day colors live in theme.cal (palette roles
     -- cal_grid/cal_weekend) — this is geometry, not style (same
     -- precedent as panels.sys's sep_count note above).
@@ -458,7 +462,7 @@ panels.lyrics       = {
 -- added after the legacy suite froze; the core provider serves it.
 ----------------------------------------------------------------
 
-local PF_FRAME = layout.pfsense.frame
+local PF_FRAME      = layout.pfsense.frame
 
 panels.pfsense      = {
   -- Box equals layout.pfsense's frame at (0,0), DERIVED — the

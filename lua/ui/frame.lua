@@ -502,12 +502,14 @@ local function draw_wxr_content(cr, theme, panels, data)
   local avi         = panel.aviation or {}
   local avi_px      = tonumber(avi.font_px) or 14
   local line_px     = tonumber(avi.line_px) or 22
-  local char_px     = tonumber(avi.char_px) or 8
+  local avi_dx      = tonumber(avi.dx) or 0
 
   local m           = avi.metar or {}
   local metar_lines = type(wxr.current_metar_lines) == "function"
       and wxr.current_metar_lines(m.wrap_col, m.max_lines) or {}
-  local metar_x     = cx - ((m.wrap_col or 43) * char_px) / 2
+  -- Anchored to hline's left edge (not wrap_col), so re-wrapping metar/taf
+  -- text never moves the block; avi.dx is purely a fine-tune nudge from there.
+  local metar_x     = cx - (hl.length or 460) / 2 + avi_dx
   local metar_y     = panel.y + (tonumber(m.y) or 455)
   for i, line in ipairs(metar_lines) do
     draw_text_left(cr, metar_x, metar_y + (i - 1) * line_px, line, mono, avi_px, colors.fg)
