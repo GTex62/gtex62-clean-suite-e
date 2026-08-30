@@ -147,16 +147,21 @@ local function read_player_state()
   local volume_raw  = tonumber(parts[7])
   local art_url     = parts[8] or ""
 
-  -- playerctl volume is 0..1 (some players report 0..100)
+  -- System output volume (pactl) is the source of truth — it's what the
+  -- idle path below shows and what actually moves when the user changes
+  -- volume via system controls. A player's own MPRIS `volume` is that
+  -- player's internal software gain, which can silently diverge from
+  -- the sink volume (verified live: VLC's reported volume held constant
+  -- across three different pactl sink levels) — use it only as a
+  -- fallback when pactl itself is unavailable.
   local volume_frac = nil
-  if volume_raw then
+  local pac = command_output("pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null")
+  local pct = pac and pac:match("(%d+)%%")
+  if pct then
+    volume_frac = math.max(0, math.min(1, tonumber(pct) / 100))
+  elseif volume_raw then
     if volume_raw > 1 then volume_raw = volume_raw / 100 end
     volume_frac = math.max(0, math.min(1, volume_raw))
-  else
-    -- pactl fallback (legacy get_volume_frac)
-    local pac = command_output("pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null")
-    local pct = pac and pac:match("(%d+)%%")
-    if pct then volume_frac = math.max(0, math.min(1, tonumber(pct) / 100)) end
   end
 
   -- Mute state (legacy get_is_muted; nil = unknown)
