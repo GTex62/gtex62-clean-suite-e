@@ -24,7 +24,11 @@ local panels        = {}
 -- metrics below were measured off the running Conky-text widget at
 -- this machine's font DPI: mono size=10 rendered 18 px glyphs
 -- (char advance ~10.85), 23 px line height, goto 260/185 columns
--- landing at x 368/262.
+-- landing at x 368/262. SYS and NET share this grid (x0/line_px/
+-- font_px/char_px) but position independently — SYS starts at
+-- monitor_grid.first_baseline, NET at its own fixed panels.net.y0
+-- (see that field's comment, F3 2026-08-29) — matching the fixed
+-- sub-position pattern the ambient and media chassis already use.
 ----------------------------------------------------------------
 
 -- Shared character grid for the monitor text flow
@@ -53,6 +57,33 @@ panels.sys          = {
 -- live throughput graphs
 panels.net          = {
   title       = "NET",
+  -- y0 (F3, 2026-08-29): fixed chassis-relative baseline for NET's
+  -- first line, replacing a threaded cursor handed off from SYS.
+  -- Before this, draw_monitor ran draw_sys_content and passed its
+  -- returned end-of-content cursor into draw_net_content, so NET's
+  -- vertical origin was emergent — wherever SYS's text flow happened
+  -- to end. mon.disk_rows() turned out NOT to be the live hazard the
+  -- scan named (it returns a fixed 2 rows from a hardcoded label list
+  -- regardless of what's actually mounted — verified live, see the
+  -- runbook), but the coupling itself was still real: SYS's line
+  -- count also depends on gpu_present() (5 lines vs 1) and on
+  -- top_cpu_rows/top_mem_rows returning fewer than 5 on a
+  -- near-idle box, either of which would silently move NET with no
+  -- visible cause. Every other combined chassis in this suite
+  -- (ambient: wxr+orb+tme; media: msc+lyrics) gives each sub-element
+  -- its own fixed, measured position — draw_ambient/draw_media call
+  -- their content functions independently, no cursor threading
+  -- anywhere else. Monitor's threading was the outlier, not the
+  -- convention. Value measured (not guessed): ran draw_sys_content's
+  -- exact line sequence against this machine's live caches (GPU
+  -- present, 5 top_cpu + 5 top_mem + 2 disk rows) — SYS's content
+  -- ends at cursor y 921, plus the 4-line gap NET's header used to
+  -- open with (now folded into this fixed value instead of a
+  -- draw-time nl() x4) = 1013. Preserves today's "NET follows
+  -- immediately after SYS" visual relationship as a snapshot, same
+  -- as legacy's own fixed 750px sys-info/net-sys offset — just
+  -- measured against this port's grid instead of legacy's.
+  y0          = 1013,
   value_x     = 262,                                  -- value column (legacy goto 185)
   vlan_gw_col = 14,                                   -- char col of "Gateway:" (legacy "%-13s " name field)
   vlan_ip_col = 23,                                   -- char col of the gateway IP

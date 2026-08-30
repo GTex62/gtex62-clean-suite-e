@@ -100,17 +100,24 @@ end
 -- SYS + NET content (Monitor chassis)
 --
 -- Legacy clean-suite sys-info + net-sys stack rendered as one
--- continuous character-grid text flow (the same layout the accepted
--- conky.text version produced, now drawn in Cairo from the core
--- caches via the monitor_helpers view model). Grid metrics live in
--- panels.monitor_grid; column constants in panels.sys / panels.net.
+-- character-grid text flow (the same layout the accepted conky.text
+-- version produced, now drawn in Cairo from the core caches via the
+-- monitor_helpers view model). Grid metrics live in panels.monitor_grid;
+-- column constants in panels.sys / panels.net. draw_sys_content and
+-- draw_net_content each position independently off that shared grid —
+-- SYS from monitor_grid.first_baseline, NET from its own fixed
+-- panels.net.y0 (F3, 2026-08-29) — rather than NET inheriting a cursor
+-- threaded out of SYS's draw call, matching how draw_ambient/draw_media
+-- position their own combined sub-elements.
 ----------------------------------------------------------------
 
-local function grid_cursor(panels)
+-- y0 override lets NET start at its own fixed baseline (panels.net.y0)
+-- instead of SYS's monitor_grid.first_baseline — see the F3 note there.
+local function grid_cursor(panels, y0)
   local g = panels.monitor_grid or {}
   return {
     x0      = g.x0 or 7,
-    y       = g.first_baseline or 24,
+    y       = y0 or g.first_baseline or 24,
     line_px = g.line_px or 23,
     font_px = g.font_px or 18,
     char_px = g.char_px or 10.85,
@@ -232,14 +239,16 @@ local function draw_sys_content(cr, theme, panels, data)
   end
   nl()
   sep()
-
-  return cur
 end
 
-local function draw_net_content(cr, theme, panels, data, cur)
+-- NET starts at its own fixed baseline (panels.net.y0), independent of
+-- how many lines SYS drew above it — see the F3 note on panels.net.y0.
+local function draw_net_content(cr, theme, panels, data)
   local mon  = data and data.mon
   local netp = panels.net
-  if not (mon and netp and cur) then return end
+  if not (mon and netp and netp.y0) then return end
+
+  local cur = grid_cursor(panels, netp.y0)
 
   local colors          = theme.colors
   local mono            = theme.fonts.mono or "DejaVu Sans Mono"
@@ -266,11 +275,6 @@ local function draw_net_content(cr, theme, panels, data, cur)
     text(netp.value_x or 262, value or "—", fg)
     nl()
   end
-
-  nl()
-  nl()
-  nl()
-  nl()
 
   -- Header: suite nameplate + updated clock (right-aligned pair)
   text(cur.x0, "GOnion Network", ink)
@@ -1290,8 +1294,8 @@ end
 ----------------------------------------------------------------
 
 function M.draw_monitor(cr, theme, panels, data)
-  local cur = draw_sys_content(cr, theme, panels, data)
-  draw_net_content(cr, theme, panels, data, cur)
+  draw_sys_content(cr, theme, panels, data)
+  draw_net_content(cr, theme, panels, data)
 end
 
 function M.draw_ambient(cr, theme, panels, data)
