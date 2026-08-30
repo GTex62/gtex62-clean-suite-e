@@ -18,7 +18,7 @@ local layout        = dofile(SUITE_DIR .. "/theme/clean-layout.lua")
 local panels        = {}
 
 ----------------------------------------------------------------
--- MONITOR CHASSIS  (598 × 1880)
+-- MONITOR CHASSIS  (568 × 1980, layout.monitor.frame)
 -- Legacy sys-info + net-sys stack rendered as one continuous text
 -- flow (the accepted conky.text layout, now drawn in Cairo). All
 -- metrics below were measured off the running Conky-text widget at
@@ -57,11 +57,29 @@ panels.net          = {
   vlan_gw_col = 14,                                   -- char col of "Gateway:" (legacy "%-13s " name field)
   vlan_ip_col = 23,                                   -- char col of the gateway IP
   vlan_ms_col = 36,                                   -- char col of the "(N ms)" rtt
-  graph       = { x = 5, width = 500, height = 112 }, -- legacy 80px at DPI scale
+  -- graph.width (500) is a literal, NOT derived from
+  -- layout.monitor.frame.width (568) — F1 decision (2026-08-29), carried
+  -- forward from the prior session's tuning pass (531 -> 500, commit
+  -- e09c875), which already deliberately broke this value's former
+  -- coincidental equality with lua/suite/monitor_helpers.lua's TP.maxlen
+  -- (the throughput ring-buffer sample count, still 531). Confirmed by
+  -- re-reading draw_net_content: the buffer can safely hold MORE samples
+  -- than the graph draws (older samples just compute an off-panel x and
+  -- get skipped), so a wider buffer than the drawn width is harmless —
+  -- only a graph WIDER than the buffer would show a permanently blank
+  -- strip on the left. Deriving graph.width from the frame was rejected
+  -- for two reasons: (1) no clean formula ties either 500 or 531 to 568
+  -- (both were tuned by eye, not computed), and (2) monitor_helpers.lua is
+  -- a pure data view model that never loads theme/panels.lua (Phase 4 of
+  -- the conversion guide keeps data and presentation separate) — wiring
+  -- it to panels.lua would cross that line for one constant. If the frame
+  -- widens enough that someone wants a wider graph, raise this value AND
+  -- TP.maxlen together by hand; they are related by convention, not code.
+  graph       = { x = 5, width = 500, height = 112 },
 }
 
 ----------------------------------------------------------------
--- AMBIENT CHASSIS  (680 × 770)
+-- AMBIENT CHASSIS  (layout.ambient.frame, top_middle)
 -- Legacy vertical stack (all coordinates chassis-relative; the
 -- chassis top sits at the legacy date-time gap_y=40 position):
 --   clock stack   y   0..90   (legacy date-time widget)
@@ -71,7 +89,23 @@ panels.net          = {
 --                              weather.center.y = 204)
 -- The calendar is a standalone top_right window (panels.cal),
 -- matching the legacy suite — it does not live in this chassis.
+--
+-- WXR/ORB/TME all derive their width from AMBIENT_W (2026-08-29, F1
+-- fix — same pattern commit 2f7573c used for the media chassis) instead
+-- of each repeating a hardcoded 680. This closes the gap the compliance
+-- scan flagged: panels.msc.arc references panels.orb.arc by value at
+-- load time, and the "music arc axis renders at the same x as the
+-- ambient arc axis" mirror only holds if BOTH chassis center on
+-- width/2 of their OWN frame. Media already tracked its frame
+-- automatically; now ambient does too, so resizing
+-- layout.ambient.frame.width keeps the mirror aligned instead of
+-- silently breaking it. Verified live: temporarily widened
+-- layout.ambient.frame.width, relaunched clean-ambient + clean-media,
+-- confirmed the ORB and MSC arc axes stayed at the same abs x as each
+-- other (just moved together), then reverted.
 ----------------------------------------------------------------
+
+local AMBIENT_W = layout.ambient.frame.width
 
 -- WXR — current conditions in arc interior, forecast tiles, METAR, TAF.
 -- All main-block offsets are pixels from the ORB arc center (legacy
@@ -80,7 +114,7 @@ panels.wxr          = {
   title = "WXR",
   x = 0,
   y = 90,
-  width = 680,
+  width = AMBIENT_W,
   height = 680,
   -- Main block: current icon + city + temp + humidity inside the arc.
   -- Offsets from arc center — legacy theme.weather.main values.
@@ -144,7 +178,7 @@ panels.orb          = {
   title = "ORB",
   x = 0,
   y = 90,
-  width = 680,
+  width = AMBIENT_W,
   height = 400,
   arc = {
     center_mode   = "auto_x",
@@ -171,12 +205,12 @@ panels.tme          = {
   title = "TME",
   x = 0,
   y = 0,
-  width = 680,
+  width = AMBIENT_W,
   height = 770,
   boxes = {
     -- Clock stack, centered on chassis width (legacy date-time widget):
     -- local %H:%M:%S, UTC line, YYYY.MM.DD line.
-    clock = { x = 0, y = 0, width = 680, height = 90 },
+    clock = { x = 0, y = 0, width = AMBIENT_W, height = 90 },
   },
   clock = {
     time_px = 30, -- legacy font_time 22pt ≈ 30px
@@ -187,20 +221,24 @@ panels.tme          = {
 }
 
 ----------------------------------------------------------------
--- CALENDAR STANDALONE  (362 × 273)
+-- CALENDAR STANDALONE  (layout.calendar.frame)
 -- Legacy calendar.conky.conf ran as its own top_right window on
 -- head 1; kept standalone here for the same reason (its position
 -- is disjoint from the ambient chassis footprint).
 ----------------------------------------------------------------
 
+local CAL_FRAME = layout.calendar.frame
+
 -- CAL — month grid with nav-arrow title, weekday header, weekend
--- gray, today in accent. Legacy theme.lua cal_* geometry.
+-- gray, today in accent. Legacy theme.lua cal_* geometry. Box equals
+-- layout.calendar's frame at (0,0), derived (2026-08-29, F1 fix) —
+-- same standalone-widget pattern as notes/pfsense.
 panels.cal          = {
   title = "CAL",
   x = 0,
   y = 0,
-  width = 362,
-  height = 273,
+  width = CAL_FRAME.width,
+  height = CAL_FRAME.height,
   calendar = {
     week_start    = "SU",
     cell_w        = 50,
@@ -310,12 +348,20 @@ panels.msc          = {
 -- Grid metrics measured off the running legacy widget (DejaVu Sans
 -- Mono, Xft size=9 at this machine's DPI): 20.0 px line pitch over
 -- 85 lines, 10.0 px char advance (39-char fold width spans 390 px).
+-- width/height derive from layout.notes.frame (2026-08-29, F1 fix) —
+-- confirmed by reading draw_notes_content that neither field is
+-- actually read by the drawing code today (it only uses panel.x/y and
+-- panel.grid.*); kept as derived rather than deleted so the box stays
+-- an accurate mirror of the window's real size if a future draw path
+-- needs it, instead of a stale hardcoded pair silently drifting from
+-- layout.notes.frame the way it already had (404×1810 vs the frame's
+-- own 404×1810 — currently equal by luck, not by construction).
 panels.notes        = {
   title      = "NOTES",
   x          = 0,
   y          = 0,
-  width      = 404,
-  height     = 1810,
+  width      = layout.notes.frame.width,
+  height     = layout.notes.frame.height,
   wrap_chars = 39,         -- fold -s -w 39 (legacy notes_wrap)
   max_lines  = 90,         -- sed -n 1,90p  (legacy notes_lines)
   refresh_s  = 3,          -- legacy execi 3
@@ -373,24 +419,36 @@ panels.lyrics       = {
 }
 
 ----------------------------------------------------------------
--- PFSENSE STANDALONE  (660 × 520)
+-- PFSENSE STANDALONE  (layout.pfsense.frame, 840 × 500)
 -- VLAN traffic flow arc visualization only (conversion guide §1.4).
 -- CPU/MEM meters, gateway label, nameplate, totals, pfBlockerNG /
 -- Pi-hole / AP status are all retired to the core sitrep utility.
 -- CAM (igc1.50) is new vs the legacy 5-arc widget — the VLAN was
 -- added after the legacy suite froze; the core provider serves it.
 ----------------------------------------------------------------
+
+local PF_FRAME = layout.pfsense.frame
+
 panels.pfsense      = {
-  -- Box equals layout.pfsense's frame at (0,0) — the standalone-widget
-  -- pattern (same as panels.cal / notes). The dome self-centers: arc
-  -- center x is width/2, so it stays centered at any frame width.
-  -- Headroom is implicit: side = width/2 − arc.r, top = arc.dy − arc.r.
-  -- Keep both ≥ 14px or the markers (12px radius, riding ON the arc
-  -- line) clip at the window edge at idle/full-scale positions.
+  -- Box equals layout.pfsense's frame at (0,0), DERIVED — the
+  -- standalone-widget pattern (same as panels.cal / notes). Until
+  -- 2026-08-29 this comment asserted a derivation that didn't exist:
+  -- width/height were a hardcoded 840×500 copy that happened to still
+  -- match the frame after its post-verify retune (660×520 -> 840×500
+  -- around the user-tuned r=400 dome) — exactly the kind of silent
+  -- divergence the runbook already recorded once causing an
+  -- off-center bug when two boxes for the same window drifted apart.
+  -- Now width/height read PF_FRAME directly, so the assertion is
+  -- enforced by code, not by remembering to update both places.
+  -- The dome self-centers: arc center x is width/2, so it stays
+  -- centered at any frame width. Headroom is implicit: side =
+  -- width/2 − arc.r, top = arc.dy − arc.r. Keep both ≥ 14px or the
+  -- markers (12px radius, riding ON the arc line) clip at the window
+  -- edge at idle/full-scale positions.
   x = 0,
   y = 0,
-  width = 840,
-  height = 500,
+  width = PF_FRAME.width,
+  height = PF_FRAME.height,
 
   -- Arc geometry (concentric dome arcs, outermost = WAN).
   -- Note the legacy theme said r=380, but its 640px window clamped the

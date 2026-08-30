@@ -21,7 +21,15 @@ layout.monitor = {
   -- machine's font DPI (mono size=10 → 18 px glyphs, 23 px lines); the
   -- Cairo port draws the same character grid (panels.monitor_grid).
   frame         = { x = 0, y = 0, width = 568, height = 1980 },
-  margin        = { top = 24, left = 18, right = 18, gap = 18 },
+  -- margin zeroed 2026-08-29 audit (F1 margin-consistency check): grep
+  -- across lua/ + theme/ + widgets/ found no consumer of layout.*.margin
+  -- anywhere — draw_sys_content/draw_net_content position everything off
+  -- panels.monitor_grid (x0/first_baseline/line_px) instead. The non-zero
+  -- values here were inert OSA-era leftovers (see the runbook's "Why This
+  -- Stalled" note: layout was originally copied from gtex62-osa). Zeroed
+  -- to match the snug-frame convention calendar/notes/pfsense already use
+  -- for their standalone frames.
+  margin        = { top = 0, left = 0, right = 0, gap = 0 },
   xinerama_head = 1, -- secondary monitor (legacy monitor_head = 1)
   alignment     = "top_left",
   -- Legacy conf said gap 40,30, but the legacy Conky-text window
@@ -47,7 +55,10 @@ layout.monitor = {
 ----------------------------------------------------------------
 layout.ambient = {
   frame         = { x = 0, y = 0, width = 680, height = 770 },
-  margin        = { top = 24, left = 18, right = 18, gap = 18 },
+  -- margin zeroed 2026-08-29 (same F1 audit as layout.monitor above) —
+  -- unused by draw_wxr_content/draw_orb_content/draw_tme_content, which
+  -- position everything off panels.wxr/orb/tme's own x/y/dy offsets.
+  margin        = { top = 0, left = 0, right = 0, gap = 0 },
   xinerama_head = 1,  -- secondary monitor (legacy monitor_head = 1)
   alignment     = "top_middle",
   gap_x         = 0,  -- legacy date-time gap_x
