@@ -27,8 +27,10 @@ SUITES_CFG_DIR="$RUNTIME_ROOT/suites"
 SUITE_TOML="$SUITES_CFG_DIR/clean-e.toml"
 
 mkdir -p "$SUITES_CFG_DIR"
-mkdir -p "$CACHE_ROOT/suites/clean-e/pf"
-mkdir -p "$CACHE_ROOT/suites/clean-e/net"
+# Only msc/ is live (album-art cache, lua/suite/msc.lua). pf/ and net/ were
+# OSA-era suite-local caches, dead since 2026-07-19: pf.lua reads the core
+# pfsense cache directly, and the OSA-port net.lua that read suites/clean-e/net/
+# was deleted the same day. Do not recreate them here.
 mkdir -p "$CACHE_ROOT/suites/clean-e/msc"
 mkdir -p "$CACHE_ROOT/runtime/pids"
 
@@ -46,10 +48,10 @@ net = "local"
 pfsense = "main_router"
 connectivity = "default"
 weather = "home"
-air = "home"
 aviation = "home"
 astro = "home"
 network = "local"
+media = "local"
 TOML
   echo "Created: $SUITE_TOML"
 else

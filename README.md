@@ -20,21 +20,31 @@ Requires [gtex62-core](../gtex62-core) `>=1.0,<2.0`.
 
 | Panel | Content |
 |-------|---------|
-| WXR   | Current conditions, 5-day forecast, METAR, TAF, SIGMET/AIRMET advisories |
+| WXR   | Current conditions, 5-day forecast, METAR, TAF (SIGMET/AIRMET advisories drawn but disabled — `panels.wxr.aviation.advisories.enabled = false`, off in the legacy theme as well) |
 | ORB   | Horizon arc — sun, moon, and visible planets by azimuth |
-| TME   | Local clock, UTC, date, month calendar |
+| TME   | Local clock, UTC, date |
 
 ### Chassis: Media (`clean-media`)
 
 | Panel | Content |
 |-------|---------|
 | MSC   | Now-playing arc, album art, title/album/artist |
-| NOTES | Sticky notes from `~/Documents/conky-notes.txt` |
 | LYRICS | Current track lyrics |
+
+### Standalone: Calendar (`clean-calendar`)
+
+Month grid with nav-arrow title, weekend/today highlighting. Its own top-level
+Conky instance since 2026-07-19 — the legacy widget's position is disjoint
+from the ambient chassis footprint, so it can't be folded in as a sub-panel.
+
+### Standalone: Notes (`clean-notes`)
+
+Sticky notes read from `~/Documents/conky-notes.txt`. Standalone since
+2026-07-20, for the same reason as the calendar.
 
 ### Standalone: pfSense (`clean-pfsense`) — optional
 
-VLAN traffic flow arcs for WAN / HOME / IOT / GUEST / INFRA interfaces.
+VLAN traffic flow arcs for WAN / HOME / IOT / GUEST / INFRA / CAM interfaces.
 Requires pfSense reachable via SSH. Data from the core `pfsense` provider.
 
 For pfBlockerNG stats, Pi-hole status, AP client counts, and cumulative data
@@ -56,9 +66,9 @@ totals, use the `sitrep` core utility (not part of this suite).
 
 ## Palette Selection
 
-At launch, `start-conky.sh` prompts for a palette. Available palettes are
-defined in `theme/clean-palettes.lua`. To launch with a specific palette
-without the prompt:
+`start-conky.sh` does not prompt for a palette — launch always falls back to
+the `default` palette unless overridden. Available palettes are defined in
+`theme/clean-palettes.lua`. To launch with a specific palette:
 
 ```bash
 GTEX62_PALETTE=dark ./scripts/start-conky.sh
@@ -80,11 +90,12 @@ GTEX62_PALETTE=dark ./scripts/start-conky.sh
 ## What Changed from clean-suite
 
 - Data collection delegated to gtex62-core providers (no local fetch scripts)
-- 9 Conky processes consolidated into 3 chassis + 1 standalone
+- 9 legacy Conky processes consolidated into 3 chassis (monitor/ambient/media)
+  and 3 standalones (calendar/notes/pfsense)
 - `apwbe` widget retired — AP status now in core `sitrep` utility
 - pfSense widget draws VLAN flow only; status/totals moved to `sitrep`
 - Theme split into palette / theme / layout / panels files
-- Palette switching at launch (was single fixed color scheme)
-- AQI panel added (air domain, not in original suite)
+- Palette switchable via `GTEX62_PALETTE` (was a single fixed color scheme) —
+  see Palette Selection above
 - Astronomy uses core `astro` provider (altitude/azimuth) replacing PyEphem sky_update.py
 - Monitor targeting via `xinerama_head` (no hardcoded pixel offsets)
