@@ -271,7 +271,6 @@ panels.cal          = {
   width = CAL_FRAME.width,
   height = CAL_FRAME.height,
   calendar = {
-    week_start    = "SU",
     cell_w        = 50,
     cell_h        = 32,
     col_gap       = 2,
@@ -283,8 +282,9 @@ panels.cal          = {
     title_h       = 30,
     title_gap     = 18,
     header_h      = 18,
-    grid_color    = { 0.35, 0.35, 0.35, 0.55 }, -- #5A5A5A @ 0.55
-    weekend_color = { 0.47, 0.47, 0.47, 1.00 }, -- #777777
+    -- Grid line / weekend-day colors live in theme.cal (palette roles
+    -- cal_grid/cal_weekend) — this is geometry, not style (same
+    -- precedent as panels.sys's sep_count note above).
   },
 }
 

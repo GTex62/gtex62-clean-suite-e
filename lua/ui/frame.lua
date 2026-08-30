@@ -721,8 +721,9 @@ local function draw_cal_content(cr, theme, panels, data)
     local origin_x  = panel.x + math.floor((panel.width - grid_w) / 2)
     local origin_y  = panel.y
 
-    local grid_col  = cal_c.grid_color or { 0.35, 0.35, 0.35, 0.55 }
-    local wkend_col = cal_c.weekend_color or { 0.47, 0.47, 0.47, 1.00 }
+    local cal_theme = theme.cal or {}
+    local grid_col  = cal_theme.grid_color or { 0.35, 0.35, 0.35, 0.55 }
+    local wkend_col = cal_theme.weekend_color or { 0.47, 0.47, 0.47, 1.00 }
 
     local view      = type(tme.calendar_view) == "function" and tme.calendar_view() or nil
     local title_str = view and view.title or tostring(os.date("%B %Y"))

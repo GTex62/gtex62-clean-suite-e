@@ -36,6 +36,10 @@ theme.net        = {
 theme.pf         = {
   arc_base = palette.pf_arc_base,
 }
+theme.cal        = {
+  grid_color    = palette.cal_grid,
+  weekend_color = palette.cal_weekend,
+}
 
 ----------------------------------------------------------------
 -- Typography

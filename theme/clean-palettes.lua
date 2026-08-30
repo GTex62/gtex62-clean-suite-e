@@ -33,6 +33,13 @@ palettes["default"] = {
   -- conventions in clean-theme.lua (theme.pf_markers) — so the only
   -- palette role here is the base arc stroke.
   pf_arc_base = { 0.65, 0.65, 0.65, 1.00 }, -- base arc stroke (gray65)
+
+  -- Calendar standalone: cell-border grid lines and weekend-day
+  -- number color. Ordinary UI chrome (unlike theme.astro/pf_markers'
+  -- documented fixed conventions), so it's palette-driven like
+  -- everything else.
+  cal_grid    = { 0.35, 0.35, 0.35, 0.55 }, -- #5A5A5A @ 0.55, cell border
+  cal_weekend = { 0.47, 0.47, 0.47, 1.00 }, -- #777777, Su/Sa day numbers
 }
 
 -- Dark variant: cooler, more blue-shifted background with teal accent.
@@ -55,6 +62,9 @@ palettes["dark"] = {
   slash_empty = { 0.30, 0.32, 0.38, 1.00 }, -- blue-shifted gray, matches dim ramp
 
   pf_arc_base = { 0.55, 0.55, 0.60, 1.00 },
+
+  cal_grid    = { 0.30, 0.32, 0.38, 0.55 }, -- slash_empty's blue-gray, grid alpha
+  cal_weekend = { 0.42, 0.44, 0.50, 1.00 }, -- same +0.12/channel lift as default
 }
 
 return palettes
