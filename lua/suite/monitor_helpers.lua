@@ -240,11 +240,6 @@ end
 -- SYS public API
 ----------------------------------------------------------------
 
-function M.sys_available()
-  refresh_sys()
-  return SYS.available
-end
-
 function M.os_name()  return sys_value("OS_NAME", "-") end
 function M.hostname() return sys_value("HOSTNAME", "-") end
 function M.user()     return sys_value("USER", "-") end

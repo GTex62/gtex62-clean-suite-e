@@ -222,10 +222,6 @@ function M.sun_rise_set()
   return pick_today_rise_set(astro_data(), "SUN")
 end
 
-function M.moon_rise_set()
-  return pick_today_rise_set(astro_data(), "MOON")
-end
-
 -- Observer latitude sign decides the apex label ("South" for northern
 -- hemisphere observers). Memoized — the observer does not move mid-session.
 local apex_label_cached
