@@ -4,14 +4,14 @@
 -- lua/ui/frame.lua draw_monitor via lua/widgets/clean_monitor.lua.
 --
 -- SYS half: reads the core system provider caches —
---   shared/system/local/current.json     identity + live CPU/RAM/GPU telemetry
---   shared/system/local/processes.json   top-N by CPU and by resident memory
---   shared/system/local/storage.json     filesystem rows (/ROOT, /WD, ...)
+--   shared/system/[profile]/current.json     identity + live CPU/RAM/GPU telemetry
+--   shared/system/[profile]/processes.json   top-N by CPU and by resident memory
+--   shared/system/[profile]/storage.json     filesystem rows (/ROOT, /WD, ...)
 -- No Conky built-ins, no direct nvidia-smi/df/proc probing — core owns the data.
 --
 -- NET half: reads the core network/net caches —
---   shared/network/local/current.json interface, WAN/LAN IPs, DNS, VLANs
---   shared/net/local/state.vars       ping probes (1.1.1.1 / 8.8.8.8) — net's
+--   shared/network/[profile]/current.json interface, WAN/LAN IPs, DNS, VLANs
+--   shared/net/[profile]/state.vars       ping probes (1.1.1.1 / 8.8.8.8) — net's
 --     own independent ping (CF_1111_MS / GOOGLE_8888_MS), not connectivity's;
 --     matches gtex62-osa's pattern. See docs/net-provider.md: net is the
 --     "display-ready projection layer," refreshed at 1s: connectivity's own
@@ -22,22 +22,39 @@
 --
 -- Each cache file is parsed once per second via a single jq call (tick cache),
 -- not one jq per field per draw.
+--
+-- Profile resolution: same as every other view model in this suite (orb.lua,
+-- wxr.lua, pf.lua, msc.lua, tme.lua) — read [profiles] out of the suite's
+-- runtime TOML, not env vars. system/network/net profiles used to be a
+-- hardcoded-copy-that-happens-to-match-config (system/connectivity via env
+-- vars nothing exported, network path hardcoded outright); see the recovery
+-- runbook's F2 note for the full history, including why the net profile's
+-- own env-var override (added when the ping reader moved to
+-- shared/net/<profile>/state.vars) is folded in here too rather than kept as
+-- an exception — docs/net-provider.md's own Suite Consumption section says
+-- net's profile is resolved "from their suite TOML [profiles] net key",
+-- same as every other domain.
 
-local HOME       = os.getenv("HOME") or ""
-local CACHE_ROOT = os.getenv("GTEX62_CACHE_DIR") or os.getenv("GTEX62_CONKY_CACHE_DIR")
+local HOME         = os.getenv("HOME") or ""
+local SUITE_ID     = os.getenv("GTEX62_SUITE_ID") or "clean-e"
+local CACHE_ROOT   = os.getenv("GTEX62_CACHE_DIR") or os.getenv("GTEX62_CONKY_CACHE_DIR")
   or (HOME .. "/.cache/gtex62-core")
-
-local SYS_PROFILE = os.getenv("GTEX62_SYSTEM_PROFILE") or "local"
-local SYS_DIR   = CACHE_ROOT .. "/shared/system/" .. SYS_PROFILE .. "/"
-local NET_JSON  = CACHE_ROOT .. "/shared/network/local/current.json"
-local NET_PROFILE = os.getenv("GTEX62_NET_PROFILE") or "local"
-local NET_STATE_VARS = CACHE_ROOT .. "/shared/net/" .. NET_PROFILE .. "/state.vars"
+local RUNTIME_ROOT = os.getenv("GTEX62_CONFIG_DIR") or os.getenv("GTEX62_CONKY_CONFIG_DIR")
+  or (HOME .. "/.config/gtex62-core")
 
 local M = {}
 
 ----------------------------------------------------------------
 -- Utils
 ----------------------------------------------------------------
+
+local function read_file(path)
+  local f = io.open(path, "r")
+  if not f then return nil end
+  local s = f:read("*a")
+  f:close()
+  return s
+end
 
 local function command_output(cmd)
   local p = io.popen(cmd, "r")
@@ -48,6 +65,46 @@ local function command_output(cmd)
   if out == "" then return nil end
   return out
 end
+
+-- Same minimal parser every other suite view model carries locally
+-- (pf.lua, wxr.lua, msc.lua, tme.lua) — not shared, per this codebase's
+-- standing convention of one small copy per module rather than a shared
+-- require target.
+local function parse_simple_toml(path)
+  local out     = {}
+  local section = nil
+  local s       = read_file(path)
+  if not s then return out end
+  for line in s:gmatch("[^\r\n]+") do
+    line = line:gsub("#.*$", ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if line ~= "" then
+      local sec = line:match("^%[([%w_%-]+)%]$")
+      if sec then
+        section      = sec
+        out[section] = out[section] or {}
+      else
+        local key, value = line:match("^([%w_%-]+)%s*=%s*(.+)$")
+        if key and value then
+          value = value:gsub('^"', ""):gsub('"$', "")
+          if section then out[section][key] = value
+          else            out[key] = value
+          end
+        end
+      end
+    end
+  end
+  return out
+end
+
+local SUITE_PROFILES = parse_simple_toml(RUNTIME_ROOT .. "/suites/" .. SUITE_ID .. ".toml").profiles or {}
+
+local SYS_PROFILE     = SUITE_PROFILES.system or "local"
+local NETWORK_PROFILE = SUITE_PROFILES.network or "local"
+local NET_PROFILE     = SUITE_PROFILES.net or "local"
+
+local SYS_DIR         = CACHE_ROOT .. "/shared/system/" .. SYS_PROFILE .. "/"
+local NET_JSON        = CACHE_ROOT .. "/shared/network/" .. NETWORK_PROFILE .. "/current.json"
+local NET_STATE_VARS  = CACHE_ROOT .. "/shared/net/" .. NET_PROFILE .. "/state.vars"
 
 local function read_first_line(path)
   local f = io.open(path, "r")

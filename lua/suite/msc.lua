@@ -83,7 +83,7 @@ end
 -- Media profile: launcher default is "local" (gtex62-core-launch
 -- MEDIA_PROFILE fallback); suites/clean-e.toml [profiles] media
 -- overrides it if present.
-local MEDIA_PROFILE = (parse_simple_toml(RUNTIME_ROOT .. "/suites/clean-e.toml").profiles or {}).media or "local"
+local MEDIA_PROFILE = (parse_simple_toml(RUNTIME_ROOT .. "/suites/" .. SUITE_ID .. ".toml").profiles or {}).media or "local"
 local LYRICS_JSON   = string.format("%s/shared/media/%s/lyrics.json", DEFAULT_CACHE_ROOT, MEDIA_PROFILE)
 
 local SUITE_CACHE_DIR = string.format("%s/suites/%s/msc", DEFAULT_CACHE_ROOT, SUITE_ID)

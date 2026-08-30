@@ -41,6 +41,8 @@ suite_manifest = "${SUITE_DIR}/suite.toml"
 enabled = true
 
 [profiles]
+system = "local"
+net = "local"
 pfsense = "main_router"
 connectivity = "default"
 weather = "home"

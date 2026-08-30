@@ -92,7 +92,7 @@ local function engine_config()
 end
 
 local function suite_config()
-  return parse_simple_toml(RUNTIME_ROOT .. "/suites/clean-e.toml")
+  return parse_simple_toml(RUNTIME_ROOT .. "/suites/" .. SUITE_ID .. ".toml")
 end
 
 local function profile_config(domain, fallback)
