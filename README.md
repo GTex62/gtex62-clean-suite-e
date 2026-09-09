@@ -99,3 +99,9 @@ GTEX62_PALETTE=dark ./scripts/start-conky.sh
   see Palette Selection above
 - Astronomy uses core `astro` provider (altitude/azimuth) replacing PyEphem sky_update.py
 - Monitor targeting via `xinerama_head` (no hardcoded pixel offsets)
+
+---
+
+## License
+
+See [LICENSE](LICENSE).
