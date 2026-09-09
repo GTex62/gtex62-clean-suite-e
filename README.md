@@ -7,6 +7,15 @@ Requires [gtex62-core](../gtex62-core) `>=1.0,<2.0`.
 
 ---
 
+## Screenshots / Design References
+
+![gtex62-clean-suite-e — full suite layout](screenshots/clean-suite-e-main.png)
+
+*The full suite — monitor, ambient, and media chassis, plus the calendar, notes,
+and pfSense standalones — running the default palette.*
+
+---
+
 ## Panel Map
 
 ### Chassis: Monitor (`clean-monitor`)
