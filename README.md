@@ -11,25 +11,25 @@ Requires [gtex62-core](../gtex62-core) `>=1.0,<2.0`.
 
 ### Chassis: Monitor (`clean-monitor`)
 
-| Panel | Content |
-|-------|---------|
-| SYS   | CPU model, core load, RAM, GPU, top processes |
+| Panel | Content                                                    |
+| ----- | ---------------------------------------------------------- |
+| SYS   | CPU model, core load, RAM, GPU, top processes              |
 | NET   | Primary interface, WAN IP, throughput, VLAN gateway status |
 
 ### Chassis: Ambient (`clean-ambient`)
 
-| Panel | Content |
-|-------|---------|
+| Panel | Content                                                                                                                                                                          |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | WXR   | Current conditions, 5-day forecast, METAR, TAF (SIGMET/AIRMET advisories drawn but disabled — `panels.wxr.aviation.advisories.enabled = false`, off in the legacy theme as well) |
-| ORB   | Horizon arc — sun, moon, and visible planets by azimuth |
-| TME   | Local clock, UTC, date |
+| ORB   | Horizon arc — sun, moon, and visible planets by azimuth                                                                                                                          |
+| TME   | Local clock, UTC, date                                                                                                                                                           |
 
 ### Chassis: Media (`clean-media`)
 
-| Panel | Content |
-|-------|---------|
-| MSC   | Now-playing arc, album art, title/album/artist |
-| LYRICS | Current track lyrics |
+| Panel  | Content                                        |
+| ------ | ---------------------------------------------- |
+| MSC    | Now-playing arc, album art, title/album/artist |
+| LYRICS | Current track lyrics                           |
 
 ### Standalone: Calendar (`clean-calendar`)
 
@@ -78,12 +78,12 @@ GTEX62_PALETTE=dark ./scripts/start-conky.sh
 
 ## Customization
 
-| File | Purpose |
-|------|---------|
-| `theme/clean-palettes.lua` | Color schemes |
-| `theme/clean-theme.lua` | Fonts, stroke widths, frame effects |
-| `theme/clean-layout.lua` | Chassis dimensions and monitor targeting |
-| `theme/panels.lua` | Per-panel position, size, and sub-box geometry |
+| File                       | Purpose                                        |
+| -------------------------- | ---------------------------------------------- |
+| `theme/clean-palettes.lua` | Color schemes                                  |
+| `theme/clean-theme.lua`    | Fonts, stroke widths, frame effects            |
+| `theme/clean-layout.lua`   | Chassis dimensions and monitor targeting       |
+| `theme/panels.lua`         | Per-panel position, size, and sub-box geometry |
 
 ---
 
