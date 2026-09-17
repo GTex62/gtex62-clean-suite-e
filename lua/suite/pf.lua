@@ -11,10 +11,31 @@
 -- a null rate means cold start, counter wrap, or a degraded stub, and the
 -- EMA simply does not step for that sample.
 --
--- One jq call per second (tick-cached); EMA steps only when a VLAN's
--- fetched_at advances, and is applied to the scaled (0..1) value after the
--- response curve — smoothing raw bytes/sec and then compressing through a
--- nonlinear curve is a different curve than smoothing after it.
+-- One jq call per second (tick-cached, and skipped entirely when
+-- providers.pfsense.ifaces is disabled — see M.enabled() below); EMA steps
+-- only when a VLAN's fetched_at advances, and is applied to the scaled
+-- (0..1) value after the response curve — smoothing raw bytes/sec and then
+-- compressing through a nonlinear curve is a different curve than
+-- smoothing after it.
+--
+-- Confirmed silent gap (see docs/doctor-design.md's Open Questions in
+-- gtex62-core): with providers.pfsense.ifaces disabled — the shipped
+-- default — ifaces.json never exists, and this widget used to render a
+-- flat, silent, empty arc forever, indistinguishable from genuine zero
+-- traffic; there is no status-word text slot anywhere on this panel (pure
+-- arc/marker geometry, draw_pf_content() in lua/ui/frame.lua) the way
+-- gtex62-sitrep's equivalent panels have (pihole.lua/pfblockerng.lua/
+-- vpn.lua all substitute a DISABLED/STALE/etc. word into an existing text
+-- row via resolve_state_word()). Fixed at the launch layer instead of by
+-- adding new UI: lua/widgets/clean_pfsense.lua now calls M.enabled() once
+-- at the first draw and exits the whole Conky process before ever
+-- rendering if the provider is off, so a disabled arc widget doesn't
+-- exist to be ambiguous — the window simply never comes up, same as this
+-- suite already does for main-suite exclusivity. M.enabled() is also
+-- checked here in refresh() as defense in depth (skips the jq subprocess
+-- entirely rather than spawning it every second against a file that will
+-- never exist) for any caller that reaches this module without going
+-- through that Conky entrypoint.
 
 local M = {}
 
@@ -42,6 +63,21 @@ local function command_output(cmd)
   return out
 end
 
+-- Section headers may be dotted (e.g. "[providers.pfsense]", which core.toml
+-- actually uses) — the word-char-only pattern this used to have
+-- ([%w_%-]+) never matches a dotted header at all, so out["providers.pfsense"]
+-- would never get created and every key under it (including the ifaces flag
+-- this file needs) would silently misfile into whatever section matched
+-- last instead. Confirmed against the real live core.toml before fixing:
+-- the old pattern read ifaces as a (misfiled, accidentally-true) key under
+-- out["providers"], not out["providers.pfsense"]["ifaces"] — harmless by
+-- accident there, but would have permanently misread it as disabled on
+-- any install where [providers] itself doesn't happen to also define an
+-- "ifaces" key. (.-) keeps "providers" and "providers.pfsense" as distinct
+-- tables, matching gtex62-sitrep's pfblockerng.lua/pihole.lua's own copies
+-- of this same parser, and is a strict superset of the old pattern for any
+-- non-dotted section name (suites/{suite}.toml's own [profiles] etc.),
+-- so this is not a behavior change for that existing caller.
 local function parse_simple_toml(path)
   local out     = {}
   local section = nil
@@ -50,7 +86,7 @@ local function parse_simple_toml(path)
   for line in s:gmatch("[^\r\n]+") do
     line = line:gsub("#.*$", ""):gsub("^%s+", ""):gsub("%s+$", "")
     if line ~= "" then
-      local sec = line:match("^%[([%w_%-]+)%]$")
+      local sec = line:match("^%[(.-)%]$")
       if sec then
         section      = sec
         out[section] = out[section] or {}
@@ -73,6 +109,23 @@ local function json_query(path, filter)
   local out = command_output(string.format("jq -r %q %q 2>/dev/null", filter, path))
   if not out or out == "null" or out == "" then return nil end
   return out
+end
+
+local function toml_bool(cfg, section, key, default)
+  local raw = (cfg[section] or {})[key]
+  if raw == nil then return default end
+  return raw == "true" or raw == true
+end
+
+-- providers.pfsense.ifaces — same core.toml flag fetch_pfsense_ifaces.sh
+-- itself is gated on (gtex62-core-launch). Default false matches core's
+-- own default (examples/runtime/core.toml.example ships ifaces = false).
+-- Re-read fresh on every call rather than cached once — cheap (pure Lua
+-- file read, no subprocess) and matches how every other domain in this
+-- codebase re-checks its own enabled flag each refresh, e.g. pfblockerng.lua.
+function M.enabled()
+  local cfg = parse_simple_toml(RUNTIME_ROOT .. "/core.toml")
+  return toml_bool(cfg, "providers.pfsense", "ifaces", false)
 end
 
 local IFACES_PATH
@@ -154,6 +207,16 @@ local function refresh(order)
   if CACHE.order_sig ~= sig then
     CACHE.filter    = build_filter(order)
     CACHE.order_sig = sig
+  end
+
+  -- Defense in depth for any caller that reaches this module without going
+  -- through lua/widgets/clean_pfsense.lua's own exit-before-draw check
+  -- (M.enabled(), the real fix — see this file's header comment). Skips the
+  -- jq subprocess entirely rather than spawning it every second against a
+  -- file that will never exist while the provider is off.
+  if not M.enabled() then
+    CACHE.fields = nil
+    return
   end
 
   local out = json_query(ifaces_json_path(), CACHE.filter)
