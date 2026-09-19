@@ -61,6 +61,21 @@ totals, use the `sitrep` core utility (not part of this suite).
 
 ---
 
+## Requirements
+
+- Conky with Lua + Cairo support, for example `conky-all`
+- `bash`, `jq`, `curl`
+- `python3` (3.11 or newer recommended; `jq` and `python3` are checked at launch)
+- The `gtex62-core` engine, expected at `~/.config/conky/gtex62-core`
+
+Debian / Ubuntu / Mint example:
+
+```bash
+sudo apt install -y conky-all jq curl python3
+```
+
+---
+
 ## Quick Start
 
 ```bash

@@ -21,9 +21,21 @@ export GTEX62_CONKY_SUITE_ID="clean-e"
 export GTEX62_CONKY_CONFIG_DIR="$RUNTIME_ROOT"
 export GTEX62_CONKY_CACHE_DIR="$CACHE_ROOT"
 
+# -- Baseline toolchain (jq, python3) --------------------------------------
+missing_tools=()
+for tool in jq python3; do
+  command -v "$tool" >/dev/null 2>&1 || missing_tools+=("$tool")
+done
+if (( ${#missing_tools[@]} > 0 )); then
+  echo "Missing required tool(s): ${missing_tools[*]}" >&2
+  echo "Most gtex62 data providers depend on jq and python3; without them the meters freeze silently." >&2
+  echo "Install them (see Requirements in $SUITE_DIR/README.md), then run this again." >&2
+  exit 1
+fi
+
 # -- Bootstrap runtime if needed ------------------------------------------
 if [[ ! -f "$RUNTIME_ROOT/suites/clean-e.toml" ]]; then
-  "$SUITE_DIR/scripts/bootstrap-runtime.sh" >/dev/null
+  "$SUITE_DIR/scripts/bootstrap-runtime.sh"
 fi
 
 # -- Stop any running instances -------------------------------------------
